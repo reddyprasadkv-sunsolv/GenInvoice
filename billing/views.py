@@ -189,6 +189,7 @@ def dashboard(request):
     filter_form = DashboardFilterForm(filter_data)
     filter_form.is_valid()
     cleaned_filters = filter_form.cleaned_data if filter_form.is_valid() else {}
+    selected_currency = cleaned_filters.get("currency")
     invoices = _apply_dashboard_filters(
         _final_invoice_queryset().select_related("company", "client"),
         cleaned_filters,
@@ -232,8 +233,8 @@ def dashboard(request):
     ]
     recent_invoices = invoices.order_by("-invoice_date", "-created_at")[:8]
     project_summary_cards = _project_summary_card_list(project_summary)
-    analytics_cards = _dashboard_analytics_cards(summary, project_summary, invoice_currency_summaries, project_currency_summaries)
-    dashboard_chart_data = _dashboard_chart_data(invoices, dashboard_projects, project_summary, summary)
+    analytics_cards = _dashboard_analytics_cards(summary, project_summary, invoice_currency_summaries, project_currency_summaries, selected_currency)
+    dashboard_chart_data = _dashboard_chart_data(invoices, dashboard_projects, project_summary, summary, project_currency_summaries, selected_currency)
     return render(
         request,
         "billing/dashboard.html",
@@ -1794,6 +1795,13 @@ def _project_summary_by_currency(projects, filters, invoices):
             "total_with_gst": project_summary["total_with_gst"],
             "client_received": received,
             "client_pending": pending,
+            "approved_value": project_summary["approved_value"],
+            "gst_amount": project_summary["gst_amount"],
+            "developer_cost": project_summary["developer_cost"],
+            "developer_paid": project_summary["developer_paid"],
+            "developer_pending": project_summary["developer_pending"],
+            "estimated_profit": project_summary["estimated_profit"],
+            "actual_cash_profit": to_money(received - project_summary["developer_paid"]),
         }
     return summaries
 
@@ -1841,9 +1849,10 @@ def _project_summary_card_list(summary):
     ]
 
 
-def _dashboard_analytics_cards(invoice_summary, project_summary, invoice_currency_summaries, project_currency_summaries):
+def _dashboard_analytics_cards(invoice_summary, project_summary, invoice_currency_summaries, project_currency_summaries, selected_currency=None):
     cards = []
-    for currency, _label in CURRENCY_CHOICES:
+    target_currencies = [selected_currency] if selected_currency else [c[0] for c in CURRENCY_CHOICES]
+    for currency in target_currencies:
         currency_invoice = invoice_currency_summaries[currency]
         currency_project = project_currency_summaries[currency]
         cards.extend(
@@ -1854,19 +1863,26 @@ def _dashboard_analytics_cards(invoice_summary, project_summary, invoice_currenc
                 {"label": f"Client / Project Received - {currency}", "value": _money(currency_project["client_received"], currency), "class": "analytics-success", "icon": currency},
             ]
         )
-    return cards + [
+    cards.extend([
         {"label": "Total Projects", "value": str(project_summary["total_projects"]), "class": "analytics-primary", "icon": "P"},
         {"label": "Active Projects", "value": str(project_summary["active_projects"]), "class": "analytics-info", "icon": "IP"},
         {"label": "Completed Projects", "value": str(project_summary["completed_projects"]), "class": "analytics-success", "icon": "C"},
         {"label": "On Hold", "value": str(project_summary["on_hold_projects"]), "class": "analytics-warning", "icon": "OH"},
-        {"label": "Client Receivables", "value": _money(project_summary["client_pending"]), "class": "analytics-warning", "icon": "CR"},
-        {"label": "Developer Payables", "value": _money(project_summary["developer_pending"]), "class": "analytics-danger", "icon": "DP"},
-        {"label": "Actual Profit", "value": _money(project_summary["actual_cash_profit"]), "class": "analytics-success", "icon": "₹"},
-        {"label": "Draft Invoices", "value": str(invoice_summary.get("draft_count", 0)), "class": "analytics-neutral", "icon": "DR"},
-    ]
+    ])
+    for currency in target_currencies:
+        c_proj = project_currency_summaries[currency]
+        cards.extend([
+            {"label": f"Client Receivables - {currency}", "value": _money(c_proj["client_pending"], currency), "class": "analytics-warning", "icon": currency},
+            {"label": f"Developer Payables - {currency}", "value": _money(c_proj["developer_pending"], currency), "class": "analytics-danger", "icon": currency},
+            {"label": f"Actual Profit - {currency}", "value": _money(c_proj["actual_cash_profit"], currency), "class": "analytics-success", "icon": currency},
+        ])
+    cards.append(
+        {"label": "Draft Invoices", "value": str(invoice_summary.get("draft_count", 0)), "class": "analytics-neutral", "icon": "DR"}
+    )
+    return cards
 
 
-def _dashboard_chart_data(invoices, projects, project_summary, invoice_summary):
+def _dashboard_chart_data(invoices, projects, project_summary, invoice_summary, project_currency_summaries=None, selected_currency=None):
     status_labels = [choice[0] for choice in Project.ProjectStatus.choices]
     project_status_counts = [projects.filter(project_status=status).count() for status in status_labels]
 
@@ -1879,7 +1895,13 @@ def _dashboard_chart_data(invoices, projects, project_summary, invoice_summary):
     ]
 
     monthly = {}
-    for invoice in _invoice_queryset_with_payment_totals(invoices).order_by("invoice_date"):
+    chart_invoices = invoices
+    if selected_currency:
+        chart_invoices = invoices.filter(currency=selected_currency)
+    else:
+        chart_invoices = invoices.filter(currency=CURRENCY_INR)
+
+    for invoice in _invoice_queryset_with_payment_totals(chart_invoices).order_by("invoice_date"):
         key = invoice.invoice_date.replace(day=1)
         if key not in monthly:
             monthly[key] = {"raised": Decimal("0.00"), "received": Decimal("0.00"), "pending": Decimal("0.00")}
@@ -1895,6 +1917,14 @@ def _dashboard_chart_data(invoices, projects, project_summary, invoice_summary):
     month_labels = [month.strftime("%b %Y") for month in month_keys]
     monthly_values = [monthly[month] for month in month_keys]
 
+    fund_summary = project_summary
+    if selected_currency and project_currency_summaries:
+        fund_summary = project_currency_summaries[selected_currency]
+    elif project_currency_summaries:
+        fund_summary = project_currency_summaries[CURRENCY_INR]
+
+    chart_currency_label = selected_currency if selected_currency else CURRENCY_INR
+
     return {
         "projectStatus": {
             "title": "Project Status",
@@ -1909,18 +1939,18 @@ def _dashboard_chart_data(invoices, projects, project_summary, invoice_summary):
             "colors": ["#16a34a", "#dc2626", "#f59e0b", "#94a3b8"],
         },
         "fundStatus": {
-            "title": "Client Receivable vs Developer Payable",
+            "title": f"Client Receivable vs Developer Payable ({chart_currency_label})",
             "labels": ["Client Pending", "Developer Pending", "Client Received", "Developer Paid"],
             "values": [
-                _chart_number(project_summary["client_pending"]),
-                _chart_number(project_summary["developer_pending"]),
-                _chart_number(project_summary["client_received"]),
-                _chart_number(project_summary["developer_paid"]),
+                _chart_number(fund_summary["client_pending"]),
+                _chart_number(fund_summary["developer_pending"]),
+                _chart_number(fund_summary["client_received"]),
+                _chart_number(fund_summary["developer_paid"]),
             ],
             "colors": ["#f59e0b", "#dc2626", "#16a34a", "#2563eb"],
         },
         "monthlyInvoice": {
-            "title": "Monthly Invoice Raised vs Received",
+            "title": f"Monthly Invoice Raised vs Received ({chart_currency_label})",
             "labels": month_labels,
             "series": [
                 {"label": "Raised", "values": [_chart_number(item["raised"]) for item in monthly_values], "color": "#2563eb"},
@@ -1929,13 +1959,13 @@ def _dashboard_chart_data(invoices, projects, project_summary, invoice_summary):
             ],
         },
         "profitSummary": {
-            "title": "Profit Summary",
+            "title": f"Profit Summary ({chart_currency_label})",
             "labels": ["Approved Value", "Developer Cost", "Estimated Profit", "Actual Cash Profit"],
             "values": [
-                _chart_number(project_summary["approved_value"]),
-                _chart_number(project_summary["developer_cost"]),
-                _chart_number(project_summary["estimated_profit"]),
-                _chart_number(project_summary["actual_cash_profit"]),
+                _chart_number(fund_summary["approved_value"]),
+                _chart_number(fund_summary["developer_cost"]),
+                _chart_number(fund_summary["estimated_profit"]),
+                _chart_number(fund_summary["actual_cash_profit"]),
             ],
             "colors": ["#2563eb", "#dc2626", "#7c3aed", "#16a34a"],
         },
