@@ -3391,3 +3391,43 @@ class ProjectAssignmentDuplicateValidationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "already assigned")
         self.assertEqual(ProjectAssignment.objects.filter(project=self.project_a).count(), 1)
+
+    def test_7_direct_orm_duplicate_assignment_raises_integrity_error(self):
+        ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_a,
+            assigned_role="Lead Developer",
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ProjectAssignment.objects.create(
+                    project=self.project_a,
+                    developer_vendor=self.vendor_a,
+                    assigned_role="Secondary Role",
+                )
+
+    def test_8_direct_orm_different_developer_same_project_allowed(self):
+        ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_a,
+            assigned_role="Backend Developer",
+        )
+        assignment_b = ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_b,
+            assigned_role="Frontend Developer",
+        )
+        self.assertIsNotNone(assignment_b.pk)
+
+    def test_9_direct_orm_same_developer_different_project_allowed(self):
+        ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_a,
+            assigned_role="Lead Developer",
+        )
+        assignment_b = ProjectAssignment.objects.create(
+            project=self.project_b,
+            developer_vendor=self.vendor_a,
+            assigned_role="Lead Developer",
+        )
+        self.assertIsNotNone(assignment_b.pk)
