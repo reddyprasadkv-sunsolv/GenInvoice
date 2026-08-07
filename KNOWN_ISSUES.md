@@ -14,7 +14,8 @@ This document records existing application issues, potential edge cases, and obs
 - **Expected Behaviour:** Form validation should display a clean, user-friendly validation error preventing duplicate active assignments for the same developer on the same project role.
 - **Possible Cause:** Lack of explicit unique validation constraint check in `ProjectAssignmentForm` or view validation prior to model saving.
 - **Risk:** Low (Occurs only on manual duplicate assignment submission).
-- **Recommended Next Step:** Add form validation in `ProjectAssignmentForm.clean()` to check for existing active assignment records.
+- **Status (August 2026):** **RESOLVED AT APPLICATION LAYER.** ProjectAssignment duplicate protection is enforced at the Django form/application layer for `(project, developer_vendor)`. The database does not currently enforce a `UniqueConstraint` for this combination. If the application later becomes multi-user/concurrent, database-level uniqueness should be evaluated separately before implementation.
+- **Recommended Next Step:** Completed form validation in `ProjectAssignmentForm.clean()` and added 6 regression tests.
 
 ---
 
