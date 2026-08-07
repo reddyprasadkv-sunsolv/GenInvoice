@@ -61,17 +61,19 @@ def generate_invoice_number(company, client, invoice_date):
     from .models import Invoice
 
     base = f"{invoice_prefix(company.company_name)}{invoice_prefix(client.client_name)}-{invoice_date.strftime('%d%m%Y')}"
-    latest = (
-        Invoice.objects.filter(invoice_number__startswith=f"{base}-")
-        .aggregate(max_number=Max("invoice_number"))
-        .get("max_number")
-    )
-    sequence = 1
-    if latest:
-        try:
-            sequence = int(latest.rsplit("-", 1)[1]) + 1
-        except (IndexError, ValueError):
-            sequence = Invoice.objects.filter(invoice_number__startswith=f"{base}-").count() + 1
+    existing_numbers = Invoice.objects.filter(
+        invoice_number__startswith=f"{base}-"
+    ).values_list("invoice_number", flat=True)
+
+    max_sequence = 0
+    for number in existing_numbers:
+        suffix = number.rsplit("-", 1)[-1]
+        if suffix.isdigit():
+            seq = int(suffix)
+            if seq > max_sequence:
+                max_sequence = seq
+
+    sequence = max_sequence + 1
     return f"{base}-{sequence:03d}"
 
 
@@ -79,17 +81,19 @@ def generate_draft_invoice_number(invoice_date):
     from .models import Invoice
 
     base = f"DRAFT-{invoice_date.strftime('%Y%m%d')}"
-    latest = (
-        Invoice.objects.filter(invoice_number__startswith=f"{base}-")
-        .aggregate(max_number=Max("invoice_number"))
-        .get("max_number")
-    )
-    sequence = 1
-    if latest:
-        try:
-            sequence = int(latest.rsplit("-", 1)[1]) + 1
-        except (IndexError, ValueError):
-            sequence = Invoice.objects.filter(invoice_number__startswith=f"{base}-").count() + 1
+    existing_numbers = Invoice.objects.filter(
+        invoice_number__startswith=f"{base}-"
+    ).values_list("invoice_number", flat=True)
+
+    max_sequence = 0
+    for number in existing_numbers:
+        suffix = number.rsplit("-", 1)[-1]
+        if suffix.isdigit():
+            seq = int(suffix)
+            if seq > max_sequence:
+                max_sequence = seq
+
+    sequence = max_sequence + 1
     return f"{base}-{sequence:03d}"
 
 
