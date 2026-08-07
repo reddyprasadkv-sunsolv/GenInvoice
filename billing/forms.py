@@ -938,7 +938,10 @@ class ProjectAssignmentForm(SanitizedModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.project = kwargs.pop("project", None)
         super().__init__(*args, **kwargs)
+        if self.instance and hasattr(self.instance, "project_id") and self.instance.project_id and not self.project:
+            self.project = self.instance.project
         self.fields["developer_vendor"].queryset = DeveloperVendor.objects.filter(status=DeveloperVendor.VendorStatus.ACTIVE)
 
     def clean_developer_cost_estimate(self):
@@ -949,6 +952,27 @@ class ProjectAssignmentForm(SanitizedModelForm):
 
     def clean_next_advance_amount_to_send(self):
         return self.cleaned_data.get("next_advance_amount_to_send") or Decimal("0.00")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        developer_vendor = cleaned_data.get("developer_vendor")
+        project = self.project or (self.instance.project if hasattr(self.instance, "project_id") and self.instance.project_id else None)
+
+        if developer_vendor and project:
+            qs = ProjectAssignment.objects.filter(
+                project=project,
+                developer_vendor=developer_vendor,
+            )
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+
+            if qs.exists():
+                self.add_error(
+                    "developer_vendor",
+                    f"This developer/vendor is already assigned to {project.project_name}.",
+                )
+        return cleaned_data
+
 
 
 class DeveloperPaymentForm(SanitizedModelForm):

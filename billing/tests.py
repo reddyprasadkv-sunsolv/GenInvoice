@@ -16,7 +16,7 @@ from django.template.loader import render_to_string
 from django.test import Client as TestClient, TestCase, override_settings
 from django.urls import reverse
 
-from .forms import ClientForm, CompanyForm, DeveloperVendorForm, InvoiceForm, ProjectForm
+from .forms import ClientForm, CompanyForm, DeveloperVendorForm, InvoiceForm, ProjectAssignmentForm, ProjectForm
 from .models import (
     ActivityLog,
     ApplicationSetting,
@@ -3236,3 +3236,158 @@ class InvoiceLineItemDeletionAndFormsetTests(TestCase):
         remaining_item = invoice.items.get()
         self.assertEqual(remaining_item.description, "Consulting Phase")
         self.assertEqual(remaining_item.hsn_sac_code.code, "998314")
+
+
+class ProjectAssignmentDuplicateValidationTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="assign_owner",
+            password="secure-test-password-123",
+        )
+        self.client.login(username="assign_owner", password="secure-test-password-123")
+        self.company = Company.objects.create(
+            company_name="Sunsolv Tech",
+            address="12 Tech Park",
+            country="India",
+            state="Karnataka",
+            city="Bengaluru",
+            pin_code="560001",
+        )
+        self.client_obj = Client.objects.create(
+            client_name="MSU Enterprises",
+            address="45 Commerce Road",
+            country="India",
+            state="Maharashtra",
+            city="Mumbai",
+            pin_code="400001",
+        )
+        self.project_a = Project.objects.create(
+            client=self.client_obj,
+            project_id="PRJ-ALPHA",
+            project_name="Alpha Website",
+        )
+        self.project_b = Project.objects.create(
+            client=self.client_obj,
+            project_id="PRJ-BETA",
+            project_name="Beta Mobile App",
+        )
+        self.vendor_a = DeveloperVendor.objects.create(
+            name="Dev A Services",
+            contact_person="Alice",
+            email="alice@deva.com",
+            phone_number="9876543210",
+        )
+        self.vendor_b = DeveloperVendor.objects.create(
+            name="Dev B Solutions",
+            contact_person="Bob",
+            email="bob@devb.com",
+            phone_number="9876543211",
+        )
+
+    def test_1_duplicate_assignment_blocked_in_form(self):
+        ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_a,
+            assigned_role="Lead Developer",
+        )
+        form = ProjectAssignmentForm(
+            data={
+                "developer_vendor": self.vendor_a.pk,
+                "assigned_role": "Backend Support",
+                "assignment_status": ProjectAssignment.AssignmentStatus.ASSIGNED,
+            },
+            project=self.project_a,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("developer_vendor", form.errors)
+        self.assertIn("already assigned", form.errors["developer_vendor"][0])
+        self.assertEqual(ProjectAssignment.objects.filter(project=self.project_a).count(), 1)
+
+    def test_2_same_developer_different_project_allowed(self):
+        ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_a,
+            assigned_role="Lead Developer",
+        )
+        form = ProjectAssignmentForm(
+            data={
+                "developer_vendor": self.vendor_a.pk,
+                "assigned_role": "Lead Developer",
+                "assignment_status": ProjectAssignment.AssignmentStatus.ASSIGNED,
+            },
+            project=self.project_b,
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_3_different_developer_same_project_allowed(self):
+        ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_a,
+            assigned_role="Backend Developer",
+        )
+        form = ProjectAssignmentForm(
+            data={
+                "developer_vendor": self.vendor_b.pk,
+                "assigned_role": "Frontend Developer",
+                "assignment_status": ProjectAssignment.AssignmentStatus.ASSIGNED,
+            },
+            project=self.project_a,
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_4_edit_existing_assignment_no_false_duplicate_error(self):
+        assignment = ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_a,
+            assigned_role="Initial Role",
+        )
+        form = ProjectAssignmentForm(
+            data={
+                "developer_vendor": self.vendor_a.pk,
+                "assigned_role": "Updated Role",
+                "developer_cost_estimate": "15000.00",
+                "assignment_status": ProjectAssignment.AssignmentStatus.ASSIGNED,
+            },
+            instance=assignment,
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_5_edit_assignment_colliding_with_another_assignment_blocked(self):
+        ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_a,
+            assigned_role="Role A",
+        )
+        assignment_b = ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_b,
+            assigned_role="Role B",
+        )
+        form = ProjectAssignmentForm(
+            data={
+                "developer_vendor": self.vendor_a.pk,
+                "assigned_role": "Changed Role",
+                "assignment_status": ProjectAssignment.AssignmentStatus.ASSIGNED,
+            },
+            instance=assignment_b,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("developer_vendor", form.errors)
+
+    def test_6_view_submission_prevents_duplicate_assignment_persistence(self):
+        ProjectAssignment.objects.create(
+            project=self.project_a,
+            developer_vendor=self.vendor_a,
+            assigned_role="Lead Developer",
+        )
+        response = self.client.post(
+            reverse("project_assign_developer", kwargs={"pk": self.project_a.pk}),
+            {
+                "developer_vendor": self.vendor_a.pk,
+                "assigned_role": "Duplicate Lead",
+                "assignment_status": ProjectAssignment.AssignmentStatus.ASSIGNED,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already assigned")
+        self.assertEqual(ProjectAssignment.objects.filter(project=self.project_a).count(), 1)

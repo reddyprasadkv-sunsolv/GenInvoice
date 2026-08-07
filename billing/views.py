@@ -1144,7 +1144,7 @@ def project_edit_client_payment(request, project_pk, payment_pk):
 def project_assign_developer(request, pk):
     project = get_object_or_404(Project.objects.select_related("client"), pk=pk)
     if request.method == "POST":
-        form = ProjectAssignmentForm(request.POST)
+        form = ProjectAssignmentForm(request.POST, project=project)
         if form.is_valid():
             assignment = form.save(commit=False)
             assignment.project = project
@@ -1159,7 +1159,7 @@ def project_assign_developer(request, pk):
             messages.success(request, "Developer/vendor assigned to project.")
             return redirect("project_detail", pk=project.pk)
     else:
-        form = ProjectAssignmentForm()
+        form = ProjectAssignmentForm(project=project)
     return render(request, "billing/project_assignment_form.html", {"form": form, "project": project})
 
 
