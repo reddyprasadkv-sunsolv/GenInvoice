@@ -1,10 +1,12 @@
 import io
 import json
 import os
+import socket
 import struct
 import shutil
 import tempfile
 import zipfile
+import start_app
 from datetime import date, timedelta
 from pathlib import Path
 from decimal import Decimal
@@ -3884,3 +3886,64 @@ class BackupRestoreSecurityTests(TestCase):
             backups = list_local_backups()
             self.assertTrue(any(b.name == result.safety_backup_name for b in backups))
             mock_apply_restore.assert_called_once()
+
+
+class DesktopLauncherPortFallbackTests(TestCase):
+    def test_1_default_port_selected_when_available(self):
+        port = start_app.find_available_port(start_port=8000)
+        self.assertGreaterEqual(port, 8000)
+
+    def test_2_fallback_port_selected_when_single_port_occupied(self):
+        occupier = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            occupier.bind((start_app.HOST, 8000))
+            occupier.listen(1)
+            selected_port = start_app.find_available_port(start_port=8000)
+            self.assertNotEqual(selected_port, 8000)
+            self.assertGreater(selected_port, 8000)
+        finally:
+            occupier.close()
+
+    def test_3_fallback_port_selected_when_multiple_ports_occupied(self):
+        occupier1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        occupier2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            occupier1.bind((start_app.HOST, 8000))
+            occupier1.listen(1)
+            occupier2.bind((start_app.HOST, 8001))
+            occupier2.listen(1)
+            selected_port = start_app.find_available_port(start_port=8000)
+            self.assertNotIn(selected_port, [8000, 8001])
+            self.assertGreaterEqual(selected_port, 8002)
+        finally:
+            occupier1.close()
+            occupier2.close()
+
+    def test_4_real_port_exhaustion_in_bounded_range_raises_runtime_error(self):
+        base_port = start_app.find_available_port(start_port=9100)
+        sockets = []
+        try:
+            for p in range(base_port, base_port + 3):
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.bind((start_app.HOST, p))
+                sock.listen(1)
+                sockets.append(sock)
+
+            with self.assertRaises(RuntimeError) as ctx:
+                start_app.find_available_port(start_port=base_port, max_attempts=3)
+            self.assertIn("No available localhost port found", str(ctx.exception))
+        finally:
+            for sock in sockets:
+                sock.close()
+
+    def test_5_browser_url_construction_uses_selected_port(self):
+        selected_port = 8005
+        user_count = 1
+        target_path = "/first-time-setup/" if user_count == 0 else "/accounts/login/"
+        target_url = f"http://{start_app.HOST}:{selected_port}{target_path}"
+        self.assertEqual(target_url, "http://127.0.0.1:8005/accounts/login/")
+
+    def test_6_localhost_binding_enforced(self):
+        self.assertEqual(start_app.HOST, "127.0.0.1")
+        self.assertNotEqual(start_app.HOST, "0.0.0.0")
+

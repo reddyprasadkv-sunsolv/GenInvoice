@@ -52,12 +52,18 @@ def prepare_environment():
     return data_dir
 
 
-def find_available_port(start_port=DEFAULT_PORT):
-    for port in range(start_port, start_port + 30):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-            probe.settimeout(0.2)
-            if probe.connect_ex((HOST, port)) != 0:
+def find_available_port(start_port=DEFAULT_PORT, max_attempts=30):
+    for port in range(start_port, start_port + max_attempts):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.settimeout(0.2)
+                if probe.connect_ex((HOST, port)) == 0:
+                    continue
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.bind((HOST, port))
                 return port
+        except OSError:
+            continue
     raise RuntimeError("No available localhost port found for InvoiceApp.")
 
 
