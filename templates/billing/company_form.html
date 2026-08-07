@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Edit Company{% else %}Add Company{% endif %} | Local Invoice Manager{% endblock %}
+{% block page_title %}{% if object %}Edit Company{% else %}Add Company{% endif %}{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <h2 class="form-section-title">Basic Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.company_name %}
+            {% include "includes/form_field.html" with field=form.address full=True %}
+            {% include "includes/form_field.html" with field=form.country %}
+            {% include "includes/form_field.html" with field=form.state %}
+            {% include "includes/form_field.html" with field=form.city %}
+            {% include "includes/form_field.html" with field=form.pin_code %}
+        </div>
+        <h2 class="form-section-title">GST Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.gstin %}
+        </div>
+        <h2 class="form-section-title">Logo and Signature</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.logo full=True help_text="PNG, JPG, JPEG, or SVG. Maximum 2 MB. Minimum 300px x 150px." %}
+            {% include "includes/form_field.html" with field=form.authorized_signature full=True help_text="PNG, JPG, JPEG, or SVG. Maximum 2 MB. Recommended 600px x 200px. Minimum 300px x 100px." %}
+        </div>
+        <h2 class="form-section-title">Bank Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.account_name %}
+            {% include "includes/form_field.html" with field=form.bank_name %}
+            {% include "includes/form_field.html" with field=form.bank_account_number %}
+            {% include "includes/form_field.html" with field=form.bank_branch %}
+            {% include "includes/form_field.html" with field=form.ifsc_code %}
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{% url 'company_list' %}">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Company</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

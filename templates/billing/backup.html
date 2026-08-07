@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Backup | Local Invoice Manager{% endblock %}
+{% block page_title %}Backup and Restore{% endblock %}
+
+{% block content %}
+<section class="content-section backup-grid">
+    <div class="backup-panel">
+        <h2>Create Backup</h2>
+        <p class="muted-copy">Creates a ZIP backup of the SQLite database and local media files. Stored locally in {{ backup_location }}.</p>
+        <form method="post" action="{% url 'backup_create' %}">
+            {% csrf_token %}
+            <div class="form-actions">
+                <button class="btn btn-primary" type="submit" data-loading-text="Processing...">Create Backup</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="backup-panel warning-panel">
+        <h2>Restore Backup</h2>
+        <p class="muted-copy">Restore replaces current data after creating a safety backup. Only upload ZIP files created by this application.</p>
+        <form method="post" action="{% url 'restore_upload' %}" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label" for="{{ restore_form.backup_file.id_for_label }}">Backup ZIP</label>
+                {{ restore_form.backup_file }}
+                {% for error in restore_form.backup_file.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-warning" type="submit" data-loading-text="Processing...">Validate Backup</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <div class="section-heading-row">
+        <h2>Local Backups</h2>
+        <span class="status-pill">{{ backups|length }} file{{ backups|length|pluralize }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Backup File</th>
+                    <th>Created</th>
+                    <th>Size</th>
+                    <th class="text-end">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for backup in backups %}
+                    <tr>
+                        <td>{{ backup.name }}</td>
+                        <td>{{ backup.created_at|date:"d-m-Y H:i" }}</td>
+                        <td>{{ backup.size|filesizeformat }}</td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-info" href="{% url 'backup_download' backup.name %}" title="Download Backup" aria-label="Download Backup">{% include "includes/icon.html" with icon="download" %}</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="empty-state">No local backups found. Create a backup to protect your data.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

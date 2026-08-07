@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Invoices | Local Invoice Manager{% endblock %}
+{% block page_title %}Invoices{% endblock %}
+
+{% block content %}
+<section class="content-section filter-section">
+    <form method="get" class="filter-grid">
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.q.id_for_label }}">Search</label>
+            {{ filter_form.q }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.month.id_for_label }}">Month</label>
+            {{ filter_form.month }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.start_date.id_for_label }}">From</label>
+            {{ filter_form.start_date }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.end_date.id_for_label }}">To</label>
+            {{ filter_form.end_date }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.company.id_for_label }}">Company</label>
+            {{ filter_form.company }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.client.id_for_label }}">Client</label>
+            {{ filter_form.client }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.project.id_for_label }}">Project</label>
+            {{ filter_form.project }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.currency.id_for_label }}">Currency</label>
+            {{ filter_form.currency }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.payment_status.id_for_label }}">Status</label>
+            {{ filter_form.payment_status }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.gst_type.id_for_label }}">GST Type</label>
+            {{ filter_form.gst_type }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.record_status.id_for_label }}">Invoice View</label>
+            {{ filter_form.record_status }}
+        </div>
+        <div class="filter-actions">
+            <button class="btn btn-primary btn-with-icon" type="submit">{% include "includes/icon.html" with icon="filter" %}<span>Apply</span></button>
+            <a class="btn btn-secondary btn-with-icon" href="{% url 'invoice_list' %}">{% include "includes/icon.html" with icon="refresh" %}<span>Reset</span></a>
+        </div>
+    </form>
+</section>
+
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-primary" href="{% url 'invoice_add' %}">Create Invoice</a>
+    </div>
+
+    <div class="table-responsive table-responsive-custom">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Invoice Number</th>
+                    <th>Date</th>
+                    <th>Company</th>
+                    <th>Client</th>
+                    <th>Project</th>
+                    <th>Currency</th>
+                    <th>Total Amount</th>
+                    <th>Received</th>
+                    <th>Pending</th>
+                    <th>Invoice Status</th>
+                    <th>GST Type</th>
+                    <th>Payment Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                    <tr>
+                        <td>{{ invoice.invoice_number }}</td>
+                        <td>{{ invoice.invoice_date|date:"d-m-Y" }}</td>
+                        <td>{{ invoice.company.company_name }}</td>
+                        <td>{{ invoice.client.client_name }}</td>
+                        <td>{{ invoice.project.project_name|default:"-" }}</td>
+                        <td>{{ invoice.currency }}</td>
+                        <td>{{ invoice.total_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ invoice.received_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ invoice.pending_amount|currency_format:invoice.currency }}</td>
+                        <td><span class="badge-soft {{ invoice.invoice_status|invoice_status_class }}">{{ invoice.invoice_status }}</span></td>
+                        <td>
+                            {% if invoice.apply_gst and invoice.gst_amount > 0 %}
+                                <span class="badge-soft badge-info">GST</span>
+                            {% else %}
+                                <span class="badge-soft badge-neutral">Non-GST</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge-soft {{ invoice.payment_status|invoice_status_class }}">{{ invoice.payment_status }}</span></td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-view" href="{% url 'invoice_detail' invoice.pk %}" title="View Invoice" aria-label="View Invoice">{% include "includes/icon.html" with icon="eye" %}</a>
+                                <a class="icon-btn icon-btn-edit" href="{% url 'invoice_edit' invoice.pk %}" title="Edit Invoice" aria-label="Edit Invoice">{% include "includes/icon.html" with icon="edit" %}</a>
+                                <form method="post" action="{% url 'invoice_clone' invoice.pk %}">
+                                    {% csrf_token %}
+                                    <button class="icon-btn icon-btn-primary" type="submit" title="Duplicate Invoice" aria-label="Duplicate Invoice" data-loading-text="Processing...">{% include "includes/icon.html" with icon="copy" %}</button>
+                                </form>
+                                <a class="icon-btn icon-btn-info" href="{% url 'invoice_preview' invoice.pk %}" title="Preview Invoice" aria-label="Preview Invoice">{% include "includes/icon.html" with icon="invoice" %}</a>
+                                {% if invoice.invoice_status == "Final" and not invoice.is_deleted %}
+                                    <a class="icon-btn icon-btn-info" href="{% url 'invoice_pdf_download' invoice.pk %}" title="Download PDF" aria-label="Download PDF">{% include "includes/icon.html" with icon="download" %}</a>
+                                    <a class="icon-btn icon-btn-success" href="{% url 'invoice_add_payment' invoice.pk %}" title="Add Payment" aria-label="Add Payment">{% include "includes/icon.html" with icon="payment" %}</a>
+                                {% endif %}
+                                <a class="icon-btn icon-btn-view" href="{% url 'invoice_payment_history' invoice.pk %}" title="Payment History" aria-label="Payment History">{% include "includes/icon.html" with icon="history" %}</a>
+                                {% if invoice.is_deleted %}
+                                    <form method="post" action="{% url 'invoice_restore' invoice.pk %}">
+                                        {% csrf_token %}
+                                        <button class="icon-btn icon-btn-restore" type="submit" title="Restore Invoice" aria-label="Restore Invoice">{% include "includes/icon.html" with icon="restore" %}</button>
+                                    </form>
+                                {% else %}
+                                    <a class="icon-btn icon-btn-danger" href="{% url 'invoice_soft_delete' invoice.pk %}" title="Soft Delete Invoice" aria-label="Soft Delete Invoice">{% include "includes/icon.html" with icon="trash" %}</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="13" class="empty-state">No invoices found. Create your first invoice to get started.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "includes/pagination.html" %}
+</section>
+{% endblock %}

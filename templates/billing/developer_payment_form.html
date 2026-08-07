@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Add Developer Payment | Local Invoice Manager{% endblock %}
+{% block page_title %}Add Developer / Vendor Payment{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="detail-grid invoice-form-section">
+        <div class="detail-item">
+            <span class="detail-label">Project</span>
+            <strong>{{ assignment.project.project_name }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Developer / Vendor</span>
+            <strong>{{ assignment.developer_vendor.name }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Project Currency</span>
+            <strong>{{ assignment.project.currency }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Current Paid</span>
+            <strong>{{ assignment.total_amount_paid_to_developer|currency_format:assignment.project.currency }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Current Pending</span>
+            <strong>{{ assignment.pending_amount_to_developer|currency_format:assignment.project.currency }}</strong>
+        </div>
+    </div>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="form-grid">
+            {% for field in form %}
+                <div class="form-group {% if field.name == 'remarks' or field.name == 'allow_extra_payment' %}full{% endif %}">
+                    {% if field.name == 'allow_extra_payment' %}
+                        <label class="restore-check">{{ field }} <span>{{ field.label }}</span></label>
+                    {% else %}
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                    {% endif %}
+                    {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{% url 'project_detail' assignment.project.pk %}">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Payment</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

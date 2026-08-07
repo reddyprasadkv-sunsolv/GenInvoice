@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Developers / Vendors | Local Invoice Manager{% endblock %}
+{% block page_title %}Developers / Vendors{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-primary" href="{% url 'developer_vendor_add' %}">Add Developer / Vendor</a>
+    </div>
+    <div class="table-responsive table-responsive-custom">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Name / Company</th>
+                    <th>Type</th>
+                    <th>Contact</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Linked Projects</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vendor in vendors %}
+                    <tr>
+                        <td>{{ vendor.name }}</td>
+                        <td>{{ vendor.vendor_type }}</td>
+                        <td>{{ vendor.contact_person|default:"-" }}</td>
+                        <td>{{ vendor.email|default:"-" }}</td>
+                        <td>{{ vendor.phone_number|default:"-" }}</td>
+                        <td>{{ vendor.assignment_count }}</td>
+                        <td><span class="badge-soft {% if vendor.status == 'Active' %}badge-success{% else %}badge-neutral{% endif %}">{{ vendor.status }}</span></td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-view" href="{% url 'developer_vendor_detail' vendor.pk %}" title="View Developer / Vendor" aria-label="View Developer / Vendor">{% include "includes/icon.html" with icon="eye" %}</a>
+                                <a class="icon-btn icon-btn-edit" href="{% url 'developer_vendor_edit' vendor.pk %}" title="Edit Developer / Vendor" aria-label="Edit Developer / Vendor">{% include "includes/icon.html" with icon="edit" %}</a>
+                                <a class="icon-btn icon-btn-danger" href="{% url 'developer_vendor_delete' vendor.pk %}" title="Delete Developer / Vendor" aria-label="Delete Developer / Vendor">{% include "includes/icon.html" with icon="trash" %}</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="8" class="empty-state">No developers or vendors found. Add one before assigning project work.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "includes/pagination.html" %}
+</section>
+{% endblock %}

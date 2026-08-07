@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company.company_name }} | Local Invoice Manager{% endblock %}
+{% block page_title %}Company Details{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-secondary" href="{% url 'company_list' %}">Back</a>
+        <a class="btn btn-warning" href="{% url 'company_edit' company.pk %}">Edit Company</a>
+    </div>
+
+    <div class="company-heading">
+        {% if company.logo %}
+            <img class="logo-preview" src="{{ company.logo.url }}" alt="{{ company.company_name }} logo">
+        {% endif %}
+        <div>
+            <span class="detail-label">Company Name</span>
+            <h2>{{ company.company_name }}</h2>
+        </div>
+    </div>
+
+    <div class="detail-grid">
+        <div class="detail-item full">
+            <span class="detail-label">Address</span>
+            <p>{{ company.address|linebreaksbr }}</p>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Country</span>
+            <strong>{{ company.country }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">State</span>
+            <strong>{{ company.state }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">City</span>
+            <strong>{{ company.city }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">PIN Code</span>
+            <strong>{{ company.pin_code }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">GSTIN Number</span>
+            <strong>{{ company.gstin|default:"Not provided" }}</strong>
+        </div>
+        {% if company.has_bank_details %}
+            <div class="detail-item full">
+                <span class="detail-label">Bank Details</span>
+                <p><strong>Account Name:</strong> {{ company.bank_account_display_name }}</p>
+                {% if company.bank_name %}<p><strong>Bank Name:</strong> {{ company.bank_name }}</p>{% endif %}
+                {% if company.bank_account_number %}<p><strong>Account Number:</strong> {{ company.bank_account_number }}</p>{% endif %}
+                {% if company.bank_branch %}<p><strong>Branch:</strong> {{ company.bank_branch }}</p>{% endif %}
+                {% if company.ifsc_code %}<p><strong>IFSC Code:</strong> {{ company.ifsc_code }}</p>{% endif %}
+            </div>
+        {% endif %}
+        <div class="detail-item full">
+            <span class="detail-label">Authorized Signature</span>
+            {% if company.authorized_signature %}
+                <img class="company-signature-preview" src="{{ company.authorized_signature.url }}" alt="{{ company.company_name }} authorized signature">
+            {% else %}
+                <p>Not uploaded</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

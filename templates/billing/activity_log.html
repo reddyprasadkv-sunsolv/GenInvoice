@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Activity Log | Local Invoice Manager{% endblock %}
+{% block page_title %}Activity Log{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Time</th><th>Module</th><th>Action</th><th>Description</th><th>User</th></tr></thead>
+            <tbody>
+                {% for activity in activities %}
+                    <tr>
+                        <td>{{ activity.created_at|date:"d-m-Y H:i" }}</td>
+                        <td>{{ activity.module }}</td>
+                        <td><span class="badge-soft badge-info">{{ activity.action }}</span></td>
+                        <td>{{ activity.description|default:"-" }}</td>
+                        <td>{{ activity.created_by.get_username|default:"System" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="empty-state">No activity recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "includes/pagination.html" %}
+</section>
+{% endblock %}

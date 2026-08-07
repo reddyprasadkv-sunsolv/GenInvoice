@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}{% if object %}Edit Project{% else %}Add Project{% endif %} | Local Invoice Manager{% endblock %}
+{% block page_title %}{% if object %}Edit Project{% else %}Add Project{% endif %}{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <h2 class="form-section-title">Basic Project Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.client project_field=True %}
+            {% include "includes/form_field.html" with field=form.project_name project_field=True %}
+            {% include "includes/form_field.html" with field=form.currency project_field=True %}
+            {% include "includes/form_field.html" with field=form.project_requirement full=True project_field=True %}
+            {% include "includes/form_field.html" with field=form.project_type project_field=True %}
+            {% include "includes/form_field.html" with field=form.billing_type project_field=True %}
+            {% include "includes/form_field.html" with field=form.custom_project_type project_field=True %}
+            {% include "includes/form_field.html" with field=form.project_description full=True project_field=True %}
+        </div>
+        <h2 class="form-section-title">Client Financials</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.estimated_quote project_field=True %}
+            {% include "includes/form_field.html" with field=form.approved_quote project_field=True %}
+            {% include "includes/form_field.html" with field=form.client_next_advance_amount project_field=True %}
+            {% include "includes/form_field.html" with field=form.client_next_advance_expected_date project_field=True %}
+            {% include "includes/form_field.html" with field=form.client_payment_remarks full=True project_field=True %}
+        </div>
+        <h2 class="form-section-title">GST Treatment</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.client_amount_gst_type project_field=True %}
+            {% include "includes/form_field.html" with field=form.project_gst_percentage project_field=True %}
+            {% include "includes/form_field.html" with field=form.partial_gst_taxable_amount project_field=True %}
+        </div>
+        <div class="summary-lines gst-preview-panel" data-client-received="{{ object.client_total_amount_received|default:'0' }}">
+            <div><span>Base Amount</span><strong data-project-gst-preview="base">{{ 0|currency_format:form.currency.value }}</strong></div>
+            <div><span>GST Amount</span><strong data-project-gst-preview="gst">{{ 0|currency_format:form.currency.value }}</strong></div>
+            <div><span>Total With GST</span><strong data-project-gst-preview="total">{{ 0|currency_format:form.currency.value }}</strong></div>
+            <div><span>Client Pending</span><strong data-project-gst-preview="pending">{{ 0|currency_format:form.currency.value }}</strong></div>
+        </div>
+        <h2 class="form-section-title">Dates and Status</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.start_date project_field=True %}
+            {% include "includes/form_field.html" with field=form.expected_completion_date project_field=True %}
+            {% include "includes/form_field.html" with field=form.actual_completion_date project_field=True %}
+            {% include "includes/form_field.html" with field=form.project_status project_field=True %}
+            {% include "includes/form_field.html" with field=form.completion_percentage project_field=True %}
+            {% include "includes/form_field.html" with field=form.priority project_field=True %}
+        </div>
+        <h2 class="form-section-title">Notes</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.remarks full=True project_field=True %}
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{% url 'project_list' %}">Cancel</a>
+            <button class="btn btn-secondary" name="project_action" value="draft" type="submit">Save Draft</button>
+            <button class="btn btn-primary" name="project_action" value="final" type="submit">Save Project</button>
+        </div>
+    </form>
+</section>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const projectType = document.getElementById("id_project_type");
+    const billingType = document.getElementById("id_billing_type");
+    const currencySelect = document.getElementById("id_currency");
+    const billingGroup = document.querySelector('[data-project-field="billing_type"]');
+    const approvedQuote = document.getElementById("id_approved_quote");
+    const gstType = document.getElementById("id_client_amount_gst_type");
+    const gstPercentage = document.getElementById("id_project_gst_percentage");
+    const partialGstAmount = document.getElementById("id_partial_gst_taxable_amount");
+    const partialGstGroup = document.querySelector('[data-project-field="partial_gst_taxable_amount"]');
+    const previewValues = {
+        base: document.querySelector('[data-project-gst-preview="base"]'),
+        gst: document.querySelector('[data-project-gst-preview="gst"]'),
+        total: document.querySelector('[data-project-gst-preview="total"]'),
+        pending: document.querySelector('[data-project-gst-preview="pending"]')
+    };
+    const previewPanel = document.querySelector(".gst-preview-panel");
+    const clientReceived = Number.parseFloat(previewPanel ? previewPanel.dataset.clientReceived : "0") || 0;
+    const dateGroups = ["start_date", "expected_completion_date", "actual_completion_date"].map(function (name) {
+        return document.querySelector('[data-project-field="' + name + '"]');
+    });
+    function currentCurrency() {
+        return currencySelect && currencySelect.value === "USD" ? "USD" : "INR";
+    }
+
+    function formatCurrency(value) {
+        const currency = currentCurrency();
+        return new Intl.NumberFormat(currency === "USD" ? "en-US" : "en-IN", {
+            style: "currency",
+            currency: currency,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        }).format(value);
+    }
+
+    function moneyValue(input) {
+        const value = input ? Number.parseFloat(input.value) : 0;
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    function setPreview(name, value) {
+        if (previewValues[name]) {
+            previewValues[name].textContent = formatCurrency(Math.max(value, 0));
+        }
+    }
+
+    function updateProjectBillingFields() {
+        const isDigitalMarketing = projectType && projectType.value === "Digital Marketing";
+        const isRecurring = isDigitalMarketing && billingType && billingType.value === "Recurring";
+        if (billingGroup) {
+            billingGroup.hidden = !isDigitalMarketing;
+        }
+        if (billingType && !isDigitalMarketing) {
+            billingType.value = "One Time";
+        }
+        dateGroups.forEach(function (group) {
+            if (group) {
+                group.hidden = isRecurring;
+            }
+        });
+    }
+
+    function updateProjectGstPreview() {
+        const approved = moneyValue(approvedQuote);
+        const rate = moneyValue(gstPercentage);
+        const taxable = moneyValue(partialGstAmount);
+        const type = gstType ? gstType.value : "WITHOUT_GST";
+        let base = approved;
+        let gst = 0;
+        let total = approved;
+        if (type === "GST_EXTRA") {
+            gst = approved * rate / 100;
+            total = approved + gst;
+        } else if (type === "GST_INCLUDED") {
+            total = approved;
+            base = rate > 0 ? approved / (1 + rate / 100) : approved;
+            gst = total - base;
+        } else if (type === "PARTIAL_GST") {
+            gst = taxable * rate / 100;
+            total = approved + gst;
+        }
+        if (partialGstGroup) {
+            partialGstGroup.hidden = type !== "PARTIAL_GST";
+        }
+        setPreview("base", base);
+        setPreview("gst", gst);
+        setPreview("total", total);
+        setPreview("pending", total - clientReceived);
+    }
+
+    if (projectType) {
+        projectType.addEventListener("change", updateProjectBillingFields);
+    }
+    if (billingType) {
+        billingType.addEventListener("change", updateProjectBillingFields);
+    }
+    if (currencySelect) {
+        currencySelect.addEventListener("change", updateProjectGstPreview);
+    }
+    [approvedQuote, gstType, gstPercentage, partialGstAmount].forEach(function (field) {
+        if (field) {
+            field.addEventListener("input", updateProjectGstPreview);
+            field.addEventListener("change", updateProjectGstPreview);
+        }
+    });
+    updateProjectBillingFields();
+    updateProjectGstPreview();
+});
+</script>
+{% endblock %}

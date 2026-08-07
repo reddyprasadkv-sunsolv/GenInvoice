@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}{{ vendor.name }} | Local Invoice Manager{% endblock %}
+{% block page_title %}Developer / Vendor Details{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-secondary" href="{% url 'developer_vendor_list' %}">Back</a>
+        <a class="btn btn-warning" href="{% url 'developer_vendor_edit' vendor.pk %}">Edit</a>
+        <a class="btn btn-danger" href="{% url 'developer_vendor_delete' vendor.pk %}">Delete</a>
+    </div>
+    <div class="detail-grid">
+        <div class="detail-item"><span class="detail-label">Name / Company</span><strong>{{ vendor.name }}</strong></div>
+        <div class="detail-item"><span class="detail-label">Type</span><strong>{{ vendor.vendor_type }}</strong></div>
+        <div class="detail-item"><span class="detail-label">Contact Person</span><strong>{{ vendor.contact_person|default:"-" }}</strong></div>
+        <div class="detail-item"><span class="detail-label">Email</span><strong>{{ vendor.email|default:"-" }}</strong></div>
+        <div class="detail-item"><span class="detail-label">Phone</span><strong>{{ vendor.phone_number|default:"-" }}</strong></div>
+        <div class="detail-item"><span class="detail-label">Status</span><strong><span class="badge-soft {% if vendor.status == 'Active' %}badge-success{% else %}badge-neutral{% endif %}">{{ vendor.status }}</span></strong></div>
+        <div class="detail-item"><span class="detail-label">GSTIN</span><strong>{{ vendor.gstin|default:"-" }}</strong></div>
+        <div class="detail-item"><span class="detail-label">PAN</span><strong>{{ vendor.pan|default:"-" }}</strong></div>
+        <div class="detail-item full"><span class="detail-label">Address</span><p>{{ vendor.address|default:"-"|linebreaksbr }}</p></div>
+        <div class="detail-item full"><span class="detail-label">Bank Details</span><p>{{ vendor.bank_details|default:"-"|linebreaksbr }}</p></div>
+        <div class="detail-item full"><span class="detail-label">Notes</span><p>{{ vendor.notes|default:"-"|linebreaksbr }}</p></div>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>Assigned Projects</h2>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Project</th><th>Role</th><th>Final Cost</th><th>Paid</th><th>Pending</th><th>Fund Status</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for row in assignment_rows %}
+                    {% with assignment=row.assignment %}
+                    <tr>
+                        <td><a href="{% url 'project_detail' assignment.project.pk %}">{{ assignment.project.project_name }}</a></td>
+                        <td>{{ assignment.assigned_role }}</td>
+                        <td>{{ assignment.developer_final_project_cost|currency_format:assignment.project.currency }}</td>
+                        <td>{{ assignment.total_amount_paid_to_developer|currency_format:assignment.project.currency }}</td>
+                        <td>{{ assignment.pending_amount_to_developer|currency_format:assignment.project.currency }}</td>
+                        <td><span class="badge-soft {{ row.fund_status.class }}">{{ row.fund_status.label }}</span></td>
+                        <td>{{ assignment.assignment_status }}</td>
+                    </tr>
+                    {% endwith %}
+                {% empty %}
+                    <tr><td colspan="7" class="empty-state">No data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

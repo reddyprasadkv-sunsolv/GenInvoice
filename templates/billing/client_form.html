@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Edit Client{% else %}Add Client{% endif %} | Local Invoice Manager{% endblock %}
+{% block page_title %}{% if object %}Edit Client{% else %}Add Client{% endif %}{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <h2 class="form-section-title">Basic Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.client_name full=True %}
+        </div>
+        <h2 class="form-section-title">Address Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.address full=True %}
+            {% include "includes/form_field.html" with field=form.country %}
+            {% include "includes/form_field.html" with field=form.state %}
+            {% include "includes/form_field.html" with field=form.city %}
+            {% include "includes/form_field.html" with field=form.pin_code %}
+        </div>
+        <h2 class="form-section-title">GST Preference</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.gstin %}
+            {% include "includes/form_field.html" with field=form.requires_gst_invoice %}
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{% url 'client_list' %}">Cancel</a>
+            {% if not object or object.client_status == "Draft" %}
+                <button class="btn btn-outline-primary" type="submit" name="client_action" value="draft">Save Draft</button>
+            {% endif %}
+            <button class="btn btn-primary" type="submit" name="client_action" value="active">
+                {% if object and object.client_status == "Draft" %}Convert to Active{% else %}Save Client{% endif %}
+            </button>
+        </div>
+    </form>
+</section>
+{% endblock %}

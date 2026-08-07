@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | Local Invoice Manager{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    <section class="content-section invoice-form-section">
+        <h2>Default Invoice Settings</h2>
+        <div class="form-grid settings-grid">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.default_gst_percentage.id_for_label }}">Default GST Percentage</label>
+                {{ form.default_gst_percentage }}
+                <div class="form-text">{{ form.default_gst_percentage.help_text }}</div>
+                {% for error in form.default_gst_percentage.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.default_payment_terms.id_for_label }}">Default Payment Terms</label>
+                {{ form.default_payment_terms }}
+                {% for error in form.default_payment_terms.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group full">
+                <label class="form-label" for="{{ form.default_terms_and_conditions.id_for_label }}">Default Terms and Conditions</label>
+                {{ form.default_terms_and_conditions }}
+                {% for error in form.default_terms_and_conditions.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group full">
+                <label class="form-label" for="{{ form.default_declaration.id_for_label }}">Default Declaration</label>
+                {{ form.default_declaration }}
+                {% for error in form.default_declaration.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section invoice-form-section">
+        <h2>Invoice Number Format</h2>
+        <div class="form-grid settings-grid">
+            <div class="form-group full">
+                <label class="form-label" for="{{ form.invoice_number_format.id_for_label }}">Format Placeholder</label>
+                {{ form.invoice_number_format }}
+                <div class="form-text">{{ form.invoice_number_format.help_text }}</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.date_separator.id_for_label }}">Date Separator</label>
+                {{ form.date_separator }}
+                <div class="form-text">{{ form.date_separator.help_text }}</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.prefix_separator.id_for_label }}">Prefix Separator</label>
+                {{ form.prefix_separator }}
+                <div class="form-text">{{ form.prefix_separator.help_text }}</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.running_sequence_length.id_for_label }}">Running Sequence Length</label>
+                {{ form.running_sequence_length }}
+                <div class="form-text">{{ form.running_sequence_length.help_text }}</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section invoice-form-section">
+        <h2>Local Application Details</h2>
+        <div class="detail-grid">
+            <div class="detail-item">
+                <span class="detail-label">Application URL</span>
+                <p>{{ local_url }}</p>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Backup Location</span>
+                <p>{{ backup_location }}</p>
+            </div>
+            <div class="detail-item full">
+                <span class="detail-label">Company Logo Guidance</span>
+                <p>{{ logo_guidance }}</p>
+            </div>
+        </div>
+    </section>
+
+    <div class="form-actions">
+        <a class="btn btn-secondary" href="{% url 'dashboard' %}">Cancel</a>
+        <button class="btn btn-primary" type="submit">Save Settings</button>
+    </div>
+</form>
+{% endblock %}

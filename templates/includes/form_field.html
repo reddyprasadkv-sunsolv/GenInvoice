@@ -1,0 +1,12 @@
+<div class="form-group {% if full %}full{% endif %}" {% if project_field %}data-project-field="{{ field.name }}"{% endif %}>
+    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if help_text %}
+        <div class="form-text">{{ help_text }}</div>
+    {% elif field.help_text %}
+        <div class="form-text">{{ field.help_text }}</div>
+    {% endif %}
+    {% for error in field.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+    {% endfor %}
+</div>

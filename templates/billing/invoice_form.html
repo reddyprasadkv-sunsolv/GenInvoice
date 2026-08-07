@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}{% if is_edit %}Edit Invoice{% else %}Create Invoice{% endif %} | Local Invoice Manager{% endblock %}
+{% block page_title %}{% if is_edit %}Edit Invoice{% else %}Create Invoice{% endif %}{% endblock %}
+
+{% block content %}
+{{ company_gstin_map|json_script:"company-gstin-map" }}
+{{ client_gst_preference_map|json_script:"client-gst-preference-map" }}
+{{ project_client_map|json_script:"project-client-map" }}
+{{ invoice_settings|json_script:"invoice-settings" }}
+<form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    <section class="content-section invoice-form-section">
+        <h2 class="form-section-title">Invoice Details</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.invoice_number.id_for_label }}">Invoice Number</label>
+                {{ form.invoice_number }}
+                <div class="form-text">{{ form.invoice_number.help_text }}</div>
+                {% for error in form.invoice_number.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.invoice_date.id_for_label }}">Invoice Date</label>
+                {{ form.invoice_date }}
+                {% for error in form.invoice_date.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.company.id_for_label }}">Company</label>
+                {{ form.company }}
+                {% for error in form.company.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.apply_gst.id_for_label }}">Apply GST?</label>
+                {{ form.apply_gst }}
+                <div class="form-text" id="gst-availability-note"></div>
+                {% for error in form.apply_gst.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                {{ form.currency }}
+                {% for error in form.currency.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.client.id_for_label }}">Client</label>
+                {{ form.client }}
+                {% for error in form.client.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.project.id_for_label }}">Project</label>
+                {{ form.project }}
+                {% for error in form.project.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group full">
+                <label class="form-label" for="{{ form.subject.id_for_label }}">Subject</label>
+                {{ form.subject }}
+                {% for error in form.subject.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section invoice-form-section">
+        <div class="section-heading-row">
+            <h2>Invoice Items</h2>
+            <button class="btn btn-primary" id="add-item-row" type="button">Add Item</button>
+        </div>
+        {{ formset.management_form }}
+        {% if formset.non_form_errors %}
+            <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
+        {% endif %}
+
+        <div class="table-responsive">
+            <table class="table invoice-item-table">
+                <thead>
+                    <tr>
+                        <th>S.No</th>
+                        <th>Description</th>
+                        <th>HSN/SAC Code</th>
+                        <th class="text-end">Item Price</th>
+                        <th class="text-end">Quantity</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">Remove</th>
+                    </tr>
+                </thead>
+                <tbody id="invoice-item-rows">
+                    {% for item_form in formset.forms %}
+                        <tr class="invoice-item-row">
+                            <td class="item-serial">{{ forloop.counter }}</td>
+                            <td>
+                                {{ item_form.description }}
+                                {% for error in item_form.description.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {{ item_form.hsn_sac_code }}
+                                {% for error in item_form.hsn_sac_code.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {{ item_form.item_price }}
+                                {% for error in item_form.item_price.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {{ item_form.quantity }}
+                                {% for error in item_form.quantity.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </td>
+                            <td class="text-end item-line-total">{{ 0|currency_format:form.currency.value }}</td>
+                            <td class="text-end">
+                                <span class="item-delete-field">{{ item_form.DELETE }}</span>
+                                <button class="btn btn-sm btn-outline-danger remove-item-row" type="button">Remove</button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <template id="empty-item-row-template">
+            <tr class="invoice-item-row">
+                <td class="item-serial"></td>
+                <td>{{ formset.empty_form.description }}</td>
+                <td>{{ formset.empty_form.hsn_sac_code }}</td>
+                <td>{{ formset.empty_form.item_price }}</td>
+                <td>{{ formset.empty_form.quantity }}</td>
+                <td class="text-end item-line-total">{{ 0|currency_format:form.currency.value }}</td>
+                <td class="text-end">
+                    <span class="item-delete-field">{{ formset.empty_form.DELETE }}</span>
+                    <button class="btn btn-sm btn-outline-danger remove-item-row" type="button">Remove</button>
+                </td>
+            </tr>
+        </template>
+    </section>
+
+    <section class="content-section invoice-form-section">
+        <h2 class="form-section-title">Terms and Signature</h2>
+        <div class="form-grid">
+            <div class="form-group full">
+                <label class="form-label" for="{{ form.terms_and_conditions.id_for_label }}">Terms and Conditions</label>
+                {{ form.terms_and_conditions }}
+                {% for error in form.terms_and_conditions.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="form-group full">
+                <label class="form-label" for="{{ form.declaration.id_for_label }}">Declaration</label>
+                {{ form.declaration }}
+                {% for error in form.declaration.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section invoice-summary-panel">
+        <h2>Calculation Summary</h2>
+        <div class="summary-lines">
+            <div><span>Subtotal</span><strong id="summary-subtotal">{{ 0|currency_format:form.currency.value }}</strong></div>
+            <div><span>GST</span><strong id="summary-gst">{{ 0|currency_format:form.currency.value }}</strong></div>
+            <div><span>Grand Total</span><strong id="summary-grand-total">{{ 0|currency_format:form.currency.value }}</strong></div>
+        </div>
+    </section>
+
+    <div class="form-actions">
+        <a class="btn btn-secondary" href="{% url 'invoice_list' %}">Cancel</a>
+        {% if not is_edit or invoice.invoice_status == "Draft" %}
+            <button class="btn btn-secondary" name="invoice_action" value="draft" type="submit">Save Draft</button>
+        {% endif %}
+        <button class="btn btn-primary" name="invoice_action" value="final" type="submit">
+            {% if invoice.invoice_status == "Draft" %}Convert to Final{% else %}Save Final Invoice{% endif %}
+        </button>
+    </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const companyGstinMap = JSON.parse(document.getElementById("company-gstin-map").textContent);
+    const clientGstPreferenceMap = JSON.parse(document.getElementById("client-gst-preference-map").textContent);
+    const projectClientMap = JSON.parse(document.getElementById("project-client-map").textContent);
+    const invoiceSettings = JSON.parse(document.getElementById("invoice-settings").textContent);
+    const companySelect = document.getElementById("id_company");
+    const applyGstSelect = document.getElementById("id_apply_gst");
+    const currencySelect = document.getElementById("id_currency");
+    const gstAvailabilityNote = document.getElementById("gst-availability-note");
+    const clientSelect = document.getElementById("id_client");
+    const projectSelect = document.getElementById("id_project");
+    const totalFormsInput = document.querySelector("input[name='items-TOTAL_FORMS']");
+    const initialFormsInput = document.querySelector("input[name='items-INITIAL_FORMS']");
+    const rowsContainer = document.getElementById("invoice-item-rows");
+    const rowTemplate = document.getElementById("empty-item-row-template");
+    const addButton = document.getElementById("add-item-row");
+    function currentCurrency() {
+        return currencySelect && currencySelect.value === "USD" ? "USD" : "INR";
+    }
+
+    function formatMoney(value) {
+        const currency = currentCurrency();
+        return new Intl.NumberFormat(currency === "USD" ? "en-US" : "en-IN", {
+            currency: currency,
+            maximumFractionDigits: 2,
+            minimumFractionDigits: 0,
+            style: "currency"
+        }).format(value);
+    }
+
+    function numberValue(input) {
+        const value = parseFloat(input && input.value ? input.value : "0");
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    function isDeleted(row) {
+        const checkbox = row.querySelector(".item-delete-field input[type='checkbox']");
+        return checkbox && checkbox.checked;
+    }
+
+    function updateSummary() {
+        let subtotal = 0;
+        const rows = rowsContainer.querySelectorAll(".invoice-item-row");
+        let visibleIndex = 1;
+        rows.forEach(function (row) {
+            const deleted = isDeleted(row);
+            row.hidden = deleted;
+            row.classList.toggle("is-deleted", deleted);
+            if (!deleted) {
+                row.querySelector(".item-serial").textContent = visibleIndex;
+                visibleIndex += 1;
+            }
+            const price = numberValue(row.querySelector(".item-price"));
+            const quantity = numberValue(row.querySelector(".item-quantity"));
+            const lineTotal = price * quantity;
+            row.querySelector(".item-line-total").textContent = formatMoney(lineTotal);
+            if (!deleted) {
+                subtotal += lineTotal;
+            }
+        });
+
+        const companyHasGstin = companyGstinMap[companySelect.value];
+        const applyGst = companyHasGstin && (!applyGstSelect || applyGstSelect.value === "True");
+        const gstPercentage = applyGst ? Number(invoiceSettings.defaultGstPercentage || 0) : 0;
+        const gstAmount = subtotal * gstPercentage / 100;
+        const grandTotal = subtotal + gstAmount;
+        document.getElementById("summary-subtotal").textContent = formatMoney(subtotal);
+        document.getElementById("summary-gst").textContent = formatMoney(gstAmount);
+        document.getElementById("summary-grand-total").textContent = formatMoney(grandTotal);
+    }
+
+    function updateGstControl() {
+        if (!applyGstSelect || !companySelect) {
+            return;
+        }
+        const companyHasGstin = companyGstinMap[companySelect.value];
+        applyGstSelect.disabled = !companyHasGstin;
+        gstAvailabilityNote.textContent = companyHasGstin ? "" : "GST cannot be applied because selected company does not have GSTIN.";
+        if (!companyHasGstin) {
+            applyGstSelect.value = "False";
+        } else if (!applyGstSelect.value) {
+            applyGstSelect.value = "True";
+        }
+        updateSummary();
+    }
+
+    function applyClientGstPreference() {
+        if (!clientSelect || !applyGstSelect) {
+            return;
+        }
+        const companyHasGstin = companyGstinMap[companySelect.value];
+        const clientRequiresGst = clientGstPreferenceMap[clientSelect.value] !== false;
+        applyGstSelect.value = companyHasGstin && clientRequiresGst ? "True" : "False";
+        updateGstControl();
+    }
+
+    function rowFormIndex(row) {
+        const field = row.querySelector("[name^='items-']");
+        const match = field && field.name.match(/^items-(\d+)-/);
+        return match ? parseInt(match[1], 10) : null;
+    }
+
+    function updateRowFormIndex(row, newIndex) {
+        row.querySelectorAll("input, select, textarea, label").forEach(function (element) {
+            ["name", "id", "for"].forEach(function (attribute) {
+                const value = element.getAttribute(attribute);
+                if (value) {
+                    element.setAttribute(attribute, value.replace(/items-\d+-/g, "items-" + newIndex + "-"));
+                }
+            });
+        });
+    }
+
+    function reindexExtraRows() {
+        const initialCount = parseInt(initialFormsInput.value || "0", 10);
+        let nextIndex = initialCount;
+        rowsContainer.querySelectorAll(".invoice-item-row").forEach(function (row) {
+            const currentIndex = rowFormIndex(row);
+            if (currentIndex !== null && currentIndex >= initialCount) {
+                updateRowFormIndex(row, nextIndex);
+                nextIndex += 1;
+            }
+        });
+        totalFormsInput.value = nextIndex;
+    }
+
+    function bindRow(row) {
+        row.querySelectorAll("input, textarea").forEach(function (field) {
+            field.addEventListener("input", updateSummary);
+            field.addEventListener("change", updateSummary);
+        });
+        row.querySelector(".remove-item-row").addEventListener("click", function () {
+            const initialCount = parseInt(initialFormsInput.value || "0", 10);
+            const currentIndex = rowFormIndex(row);
+            const checkbox = row.querySelector(".item-delete-field input[type='checkbox']");
+            if (currentIndex !== null && currentIndex < initialCount && checkbox) {
+                checkbox.checked = true;
+                row.hidden = true;
+            } else {
+                row.remove();
+                reindexExtraRows();
+            }
+            updateSummary();
+        });
+    }
+
+    function filterProjects() {
+        if (!clientSelect || !projectSelect) {
+            return;
+        }
+        const selectedClient = clientSelect.value;
+        let selectedStillVisible = false;
+        projectSelect.querySelectorAll("option").forEach(function (option) {
+            if (!option.value) {
+                option.hidden = false;
+                return;
+            }
+            const visible = !selectedClient || projectClientMap[option.value] === selectedClient;
+            option.hidden = !visible;
+            if (visible && option.selected) {
+                selectedStillVisible = true;
+            }
+        });
+        if (projectSelect.value && !selectedStillVisible) {
+            projectSelect.value = "";
+        }
+    }
+
+    addButton.addEventListener("click", function () {
+        const formIndex = parseInt(totalFormsInput.value, 10);
+        rowsContainer.insertAdjacentHTML("beforeend", rowTemplate.innerHTML.replaceAll("__prefix__", formIndex));
+        totalFormsInput.value = formIndex + 1;
+        bindRow(rowsContainer.lastElementChild);
+        updateSummary();
+    });
+
+    rowsContainer.querySelectorAll(".invoice-item-row").forEach(bindRow);
+    if (companySelect) {
+        companySelect.addEventListener("change", function () {
+            if (!invoiceSettings.isEdit) {
+                applyClientGstPreference();
+            } else {
+                updateGstControl();
+            }
+        });
+    }
+    if (applyGstSelect) {
+        applyGstSelect.addEventListener("change", updateSummary);
+    }
+    if (currencySelect) {
+        currencySelect.addEventListener("change", updateSummary);
+    }
+    if (clientSelect) {
+        clientSelect.addEventListener("change", function () {
+            filterProjects();
+            if (!invoiceSettings.isEdit) {
+                applyClientGstPreference();
+            }
+        });
+    }
+    filterProjects();
+    updateGstControl();
+    updateSummary();
+});
+</script>
+{% endblock %}

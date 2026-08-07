@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Recurring Invoices | Local Invoice Manager{% endblock %}
+{% block page_title %}Recurring Invoices{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-primary btn-with-icon" href="{% url 'recurring_invoice_add' %}">{% include "includes/icon.html" with icon="invoice" %}<span>Add Recurring Template</span></a>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Client</th>
+                    <th>Company</th>
+                    <th>Frequency</th>
+                    <th>Next Invoice Date</th>
+                    <th>Items</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for template in templates_list %}
+                    <tr>
+                        <td>{{ template.title }}</td>
+                        <td>{{ template.client.client_name }}</td>
+                        <td>{{ template.company.company_name }}</td>
+                        <td>{{ template.frequency }}</td>
+                        <td>{{ template.next_invoice_date|date:"d-m-Y" }}</td>
+                        <td>{{ template.items.count }}</td>
+                        <td><span class="badge-soft {% if template.is_active %}badge-success{% else %}badge-neutral{% endif %}">{% if template.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-edit" href="{% url 'recurring_invoice_edit' template.pk %}" title="Edit Template" aria-label="Edit Template">{% include "includes/icon.html" with icon="edit" %}</a>
+                                <form method="post" action="{% url 'recurring_invoice_generate' template.pk %}">
+                                    {% csrf_token %}
+                                    <button class="icon-btn icon-btn-primary" type="submit" title="Generate Draft Invoice" aria-label="Generate Draft Invoice" data-loading-text="Processing...">{% include "includes/icon.html" with icon="invoice" %}</button>
+                                </form>
+                                <form method="post" action="{% url 'recurring_invoice_toggle' template.pk %}">
+                                    {% csrf_token %}
+                                    <button class="icon-btn {% if template.is_active %}icon-btn-danger{% else %}icon-btn-restore{% endif %}" type="submit" title="{% if template.is_active %}Deactivate{% else %}Activate{% endif %} Template" aria-label="{% if template.is_active %}Deactivate{% else %}Activate{% endif %} Template">{% include "includes/icon.html" with icon="refresh" %}</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="8" class="empty-state">No recurring invoice templates found. Add one for retainers, subscriptions, or maintenance work.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "includes/pagination.html" %}
+</section>
+{% endblock %}

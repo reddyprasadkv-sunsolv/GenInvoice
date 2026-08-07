@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm Restore | Local Invoice Manager{% endblock %}
+{% block page_title %}Confirm Restore{% endblock %}
+
+{% block content %}
+<section class="content-section warning-panel">
+    <h2>Restore Confirmation</h2>
+    <p class="muted-copy">This action will replace the current SQLite database and media folder. A safety backup is created before restore starts.</p>
+
+    {% if validation %}
+        <div class="detail-grid restore-summary">
+            <div class="detail-item">
+                <span class="detail-label">Database</span>
+                <p>Validated</p>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Manifest</span>
+                <p>Validated</p>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Media Files</span>
+                <p>{{ validation.media_file_count }}</p>
+            </div>
+        </div>
+    {% endif %}
+
+    <form method="post" class="restore-confirm-form">
+        {% csrf_token %}
+        <label class="restore-check">
+            <input type="checkbox" name="confirm_restore" value="yes" required>
+            <span>I understand this will replace current local invoice data.</span>
+        </label>
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{% url 'backup' %}">Cancel</a>
+            <button class="btn btn-danger" type="submit">Restore Backup</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

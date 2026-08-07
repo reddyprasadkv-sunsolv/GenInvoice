@@ -1,0 +1,390 @@
+{% load currency_filters %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Invoice {{ invoice.invoice_number }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            color: #111827;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 9.6pt;
+            line-height: 1.35;
+            margin: 0;
+        }
+
+        h1,
+        h2,
+        h3,
+        p {
+            margin: 0;
+        }
+
+        .invoice-container {
+            width: 100%;
+        }
+
+        .header {
+            border-bottom: 2px solid #111827;
+            display: table;
+            padding-bottom: 5mm;
+            width: 100%;
+        }
+
+        .company-block,
+        .meta-block {
+            display: table-cell;
+            vertical-align: top;
+        }
+
+        .company-block {
+            width: 65%;
+        }
+
+        .meta-block {
+            text-align: right;
+            width: 35%;
+        }
+
+        .company-logo {
+            margin-bottom: 3mm;
+            max-height: 20mm;
+            object-fit: contain;
+            width: 40mm;
+        }
+
+        .company-name {
+            font-size: 14pt;
+            margin-bottom: 1.5mm;
+        }
+
+        .invoice-title {
+            font-size: 19pt;
+            letter-spacing: 0;
+            margin-bottom: 3mm;
+            text-transform: uppercase;
+        }
+
+        .label {
+            color: #475569;
+            display: inline-block;
+            font-size: 8.5pt;
+            font-weight: bold;
+            margin-right: 2mm;
+            text-transform: uppercase;
+        }
+
+        .section {
+            margin-top: 4.5mm;
+        }
+
+        .party-grid {
+            display: table;
+            width: 100%;
+        }
+
+        .party,
+        .subject-block {
+            border: 1px solid #cbd5e1;
+            display: table-cell;
+            padding: 4mm;
+            vertical-align: top;
+        }
+
+        .party {
+            width: 56%;
+        }
+
+        .subject-block {
+            border-left: 0;
+            width: 44%;
+        }
+
+        .party h3,
+        .copy-block h3 {
+            font-size: 11pt;
+            margin: 1mm 0 2mm;
+        }
+
+        table {
+            border-collapse: collapse;
+            table-layout: fixed;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border: 1px solid #cbd5e1;
+            padding: 2mm;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+
+        th {
+            background: #f1f5f9;
+            font-size: 8.8pt;
+            text-transform: uppercase;
+        }
+
+        .col-serial {
+            width: 7%;
+        }
+
+        .col-description {
+            width: 34%;
+        }
+
+        .col-hsn-sac {
+            width: 13%;
+        }
+
+        .col-price {
+            width: 15%;
+        }
+
+        .col-quantity {
+            width: 13%;
+        }
+
+        .col-total {
+            width: 18%;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .money {
+            white-space: nowrap;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .totals {
+            margin-left: auto;
+            margin-top: 3mm;
+            width: 78mm;
+        }
+
+        .totals-row {
+            border-bottom: 1px solid #cbd5e1;
+            display: table;
+            padding: 1.4mm 0;
+            width: 100%;
+        }
+
+        .totals-row span,
+        .totals-row strong {
+            display: table-cell;
+        }
+
+        .totals-row strong {
+            text-align: right;
+        }
+
+        .totals-row.grand {
+            border-bottom: 0;
+            font-size: 12pt;
+        }
+
+        .amount-words {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            margin-top: 3mm;
+            padding: 2.2mm;
+        }
+
+        .bank-details {
+            border: 1px solid #cbd5e1;
+            margin-top: 3mm;
+            padding: 2.2mm;
+        }
+
+        .bank-details h3 {
+            font-size: 10.5pt;
+            margin-bottom: 1.5mm;
+        }
+
+        .copy-block {
+            margin-top: 3.5mm;
+        }
+
+        .copy-block p {
+            white-space: pre-line;
+        }
+
+        .signature-grid {
+            display: table;
+            margin-top: 7mm;
+            width: 100%;
+        }
+
+        .signature {
+            display: table-cell;
+            padding-right: 10mm;
+            vertical-align: bottom;
+            width: 50%;
+        }
+
+        .signature:last-child {
+            padding-left: 10mm;
+            padding-right: 0;
+        }
+
+        .signature-line {
+            border-top: 1px solid #111827;
+            height: 8mm;
+        }
+
+        .company-signature {
+            display: block;
+            margin: 2mm 0 1mm;
+            max-height: 18mm;
+            object-fit: contain;
+            width: 40mm;
+        }
+
+        .computer-generated-note {
+            color: #475569;
+            font-size: 8.5pt;
+            margin-top: 4mm;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <main class="invoice-container">
+        <header class="header">
+            <div class="company-block">
+                {% if company_logo_uri %}
+                    <img class="company-logo" src="{{ company_logo_uri }}" alt="{{ invoice.company.company_name }} logo">
+                {% endif %}
+                <h2 class="company-name">{{ invoice.company.company_name }}</h2>
+                <p>{{ invoice.company.address|linebreaksbr }}</p>
+                <p>{{ invoice.company.city }}, {{ invoice.company.state }}, {{ invoice.company.country }} - {{ invoice.company.pin_code }}</p>
+                {% if invoice.company.gstin %}
+                    <p><strong>GSTIN:</strong> {{ invoice.company.gstin }}</p>
+                {% endif %}
+            </div>
+            <div class="meta-block">
+                <h1 class="invoice-title">{{ invoice_title }}</h1>
+                <p><span class="label">Invoice No</span>{{ invoice.invoice_number }}</p>
+                <p><span class="label">Date</span>{{ invoice.invoice_date|date:"d-m-Y" }}</p>
+                <p><span class="label">Currency</span>{{ invoice.currency }}</p>
+            </div>
+        </header>
+
+        <section class="section party-grid">
+            <div class="party">
+                <span class="label">Bill To</span>
+                <h3>{{ invoice.client.client_name }}</h3>
+                <p>{{ invoice.client.address|linebreaksbr }}</p>
+                <p>{{ invoice.client.city }}, {{ invoice.client.state }}, {{ invoice.client.country }} - {{ invoice.client.pin_code }}</p>
+                {% if invoice.client.gstin %}
+                    <p><strong>GSTIN:</strong> {{ invoice.client.gstin }}</p>
+                {% endif %}
+            </div>
+            <div class="subject-block">
+                <span class="label">Subject</span>
+                <p>{{ invoice.subject }}</p>
+            </div>
+        </section>
+
+        <section class="section">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="col-serial text-center">S.No</th>
+                        <th class="col-description">Description</th>
+                        <th class="col-hsn-sac">HSN/SAC Code</th>
+                        <th class="col-price text-right">Item Price</th>
+                        <th class="col-quantity text-right">Quantity</th>
+                        <th class="col-total text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in invoice.items.all %}
+                        <tr>
+                            <td class="text-center">{{ item.serial_number }}</td>
+                            <td>{{ item.description }}</td>
+                            <td>{{ item.hsn_sac_code.code|default:"-" }}</td>
+                            <td class="text-right money">{{ item.item_price|currency_format:invoice.currency }}</td>
+                            <td class="text-right">{{ item.quantity|floatformat:2 }}</td>
+                            <td class="text-right money">{{ item.total|currency_format:invoice.currency }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="totals">
+            <div class="totals-row">
+                <span>Subtotal</span>
+                <strong class="money">{{ invoice.subtotal|currency_format:invoice.currency }}</strong>
+            </div>
+            {% if invoice.apply_gst and invoice.gst_amount > 0 %}
+                <div class="totals-row">
+                    <span>GST @ {{ invoice.gst_percentage|floatformat:2 }}%</span>
+                    <strong class="money">{{ invoice.gst_amount|currency_format:invoice.currency }}</strong>
+                </div>
+            {% endif %}
+            <div class="totals-row grand">
+                <span>Grand Total</span>
+                <strong class="money">{{ invoice.total_amount|currency_format:invoice.currency }}</strong>
+            </div>
+        </section>
+
+        <p class="amount-words"><strong>Amount in Words:</strong> {{ invoice.amount_in_words }}</p>
+
+        {% if invoice.company.has_bank_details %}
+            <section class="bank-details">
+                <h3>Bank Details</h3>
+                <p><strong>Account Name:</strong> {{ invoice.company.bank_account_display_name }}</p>
+                {% if invoice.company.bank_name %}<p><strong>Bank Name:</strong> {{ invoice.company.bank_name }}</p>{% endif %}
+                {% if invoice.company.bank_account_number %}<p><strong>Account Number:</strong> {{ invoice.company.bank_account_number }}</p>{% endif %}
+                {% if invoice.company.bank_branch %}<p><strong>Branch:</strong> {{ invoice.company.bank_branch }}</p>{% endif %}
+                {% if invoice.company.ifsc_code %}<p><strong>IFSC Code:</strong> {{ invoice.company.ifsc_code }}</p>{% endif %}
+            </section>
+        {% endif %}
+
+        <section class="copy-block">
+            <h3>Terms and Conditions</h3>
+            <p>{{ invoice.terms_and_conditions }}</p>
+        </section>
+
+        <section class="copy-block">
+            <h3>Declaration</h3>
+            <p>{{ invoice.declaration }}</p>
+        </section>
+
+        <section class="signature-grid">
+            <div class="signature">
+                <p>For {{ invoice.company.company_name }}</p>
+                {% if company_signature_uri %}
+                    <img class="company-signature" src="{{ company_signature_uri }}" alt="{{ invoice.company.company_name }} authorized signature">
+                {% else %}
+                    <div class="signature-line"></div>
+                {% endif %}
+                <strong>Authorized Signature</strong>
+            </div>
+            <div class="signature">
+                <div class="signature-line"></div>
+                <p>For {{ invoice.client.client_name }}</p>
+                <strong>Authorized Signature</strong>
+            </div>
+        </section>
+        <p class="computer-generated-note">This is a computer generated invoice.</p>
+    </main>
+</body>
+</html>

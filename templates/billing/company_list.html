@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Companies | Local Invoice Manager{% endblock %}
+{% block page_title %}Companies{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-primary" href="{% url 'company_add' %}">Add Company</a>
+    </div>
+
+    <div class="table-responsive table-responsive-custom">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Company</th>
+                    <th>City</th>
+                    <th>State</th>
+                    <th>GSTIN</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for company in companies %}
+                    <tr>
+                        <td>
+                            <div class="company-cell">
+                                {% if company.logo %}
+                                    <img src="{{ company.logo.url }}" alt="{{ company.company_name }} logo">
+                                {% endif %}
+                                <span>{{ company.company_name }}</span>
+                            </div>
+                        </td>
+                        <td>{{ company.city }}</td>
+                        <td>{{ company.state }}</td>
+                        <td>{{ company.gstin|default:"-" }}</td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-view" href="{% url 'company_detail' company.pk %}" title="View Company" aria-label="View Company">{% include "includes/icon.html" with icon="eye" %}</a>
+                                <a class="icon-btn icon-btn-edit" href="{% url 'company_edit' company.pk %}" title="Edit Company" aria-label="Edit Company">{% include "includes/icon.html" with icon="edit" %}</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="5" class="empty-state">No companies found. Add a company to start creating invoices.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "includes/pagination.html" %}
+</section>
+{% endblock %}

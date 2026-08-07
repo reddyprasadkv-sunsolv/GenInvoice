@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Search | Local Invoice Manager{% endblock %}
+{% block page_title %}Search{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <form class="filter-actions global-search-page" method="get" action="{% url 'global_search' %}">
+        <input class="form-control" type="search" name="q" value="{{ query }}" placeholder="Search invoices, clients, projects..." autofocus>
+        <button class="btn btn-primary btn-with-icon" type="submit">{% include "includes/icon.html" with icon="filter" %}<span>Search</span></button>
+    </form>
+</section>
+
+{% if query %}
+    {% for section in sections %}
+        <section class="content-section invoice-form-section">
+            <div class="section-heading-row">
+                <h2>{{ section.title }}</h2>
+                <span class="status-pill">{{ section.total }} result{{ section.total|pluralize }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <tbody>
+                        {% for item in section.items %}
+                            <tr>
+                                <td>
+                                    {% if section.key == "invoices" %}
+                                        <strong>{{ item.invoice_number }}</strong><br><span class="muted-copy">{{ item.client.client_name }} - {{ item.subject|default:"No subject" }}</span>
+                                    {% elif section.key == "clients" %}
+                                        <strong>{{ item.client_name }}</strong><br><span class="muted-copy">{{ item.city|default:"-" }}{% if item.gstin %} - {{ item.gstin }}{% endif %}</span>
+                                    {% elif section.key == "companies" %}
+                                        <strong>{{ item.company_name }}</strong><br><span class="muted-copy">{{ item.city|default:"-" }}{% if item.gstin %} - {{ item.gstin }}{% endif %}</span>
+                                    {% elif section.key == "projects" %}
+                                        <strong>{{ item.project_name }}</strong><br><span class="muted-copy">{{ item.project_id }} - {{ item.client.client_name }}</span>
+                                    {% elif section.key == "vendors" %}
+                                        <strong>{{ item.name }}</strong><br><span class="muted-copy">{{ item.vendor_type }}{% if item.email %} - {{ item.email }}{% endif %}</span>
+                                    {% else %}
+                                        <strong>{{ item.code }}</strong><br><span class="muted-copy">{{ item.description|default:"No description" }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end action-cell">
+                                    <div class="action-icons">
+                                        {% if section.key == "invoices" %}
+                                            <a class="icon-btn icon-btn-view" href="{% url 'invoice_detail' item.pk %}" title="View Invoice" aria-label="View Invoice">{% include "includes/icon.html" with icon="eye" %}</a>
+                                            <a class="icon-btn icon-btn-edit" href="{% url 'invoice_edit' item.pk %}" title="Edit Invoice" aria-label="Edit Invoice">{% include "includes/icon.html" with icon="edit" %}</a>
+                                        {% elif section.key == "clients" %}
+                                            <a class="icon-btn icon-btn-view" href="{% url 'client_detail' item.pk %}" title="View Client" aria-label="View Client">{% include "includes/icon.html" with icon="eye" %}</a>
+                                            <a class="icon-btn icon-btn-edit" href="{% url 'client_edit' item.pk %}" title="Edit Client" aria-label="Edit Client">{% include "includes/icon.html" with icon="edit" %}</a>
+                                        {% elif section.key == "companies" %}
+                                            <a class="icon-btn icon-btn-view" href="{% url 'company_detail' item.pk %}" title="View Company" aria-label="View Company">{% include "includes/icon.html" with icon="eye" %}</a>
+                                            <a class="icon-btn icon-btn-edit" href="{% url 'company_edit' item.pk %}" title="Edit Company" aria-label="Edit Company">{% include "includes/icon.html" with icon="edit" %}</a>
+                                        {% elif section.key == "projects" %}
+                                            <a class="icon-btn icon-btn-view" href="{% url 'project_detail' item.pk %}" title="View Project" aria-label="View Project">{% include "includes/icon.html" with icon="eye" %}</a>
+                                            <a class="icon-btn icon-btn-edit" href="{% url 'project_edit' item.pk %}" title="Edit Project" aria-label="Edit Project">{% include "includes/icon.html" with icon="edit" %}</a>
+                                        {% elif section.key == "vendors" %}
+                                            <a class="icon-btn icon-btn-view" href="{% url 'developer_vendor_detail' item.pk %}" title="View Developer / Vendor" aria-label="View Developer / Vendor">{% include "includes/icon.html" with icon="eye" %}</a>
+                                            <a class="icon-btn icon-btn-edit" href="{% url 'developer_vendor_edit' item.pk %}" title="Edit Developer / Vendor" aria-label="Edit Developer / Vendor">{% include "includes/icon.html" with icon="edit" %}</a>
+                                        {% else %}
+                                            <a class="icon-btn icon-btn-edit" href="{% url 'hsn_sac_code_edit' item.pk %}" title="Edit HSN/SAC Code" aria-label="Edit HSN/SAC Code">{% include "includes/icon.html" with icon="edit" %}</a>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="2" class="empty-state">No data available for this section.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    {% endfor %}
+{% else %}
+    <section class="content-section">
+        <p class="empty-state">Enter a keyword to search invoices, clients, companies, projects, developers/vendors, and HSN/SAC codes.</p>
+    </section>
+{% endif %}
+{% endblock %}

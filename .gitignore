@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+db.sqlite3
+.pytest_cache/
+.cache/
+.coverage
+htmlcov/
+tmp/
+temp/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Django generated & runtime files
+staticfiles/
+media/invoices/*
+!media/invoices/.gitkeep
+media/reports/*
+!media/reports/.gitkeep
+media/company_logos/*
+!media/company_logos/.gitkeep
+media/company_signatures/*
+!media/company_signatures/.gitkeep
+backups/*
+!backups/.gitkeep
+
+# Build & Packaging outputs
+dist/
+build/
+*.egg-info/
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+*.log
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+

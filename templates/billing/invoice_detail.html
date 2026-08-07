@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}{{ invoice.invoice_number }} | Local Invoice Manager{% endblock %}
+{% block page_title %}Invoice Details{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-secondary btn-with-icon" href="{% url 'invoice_list' %}" title="Back to Invoices">{% include "includes/icon.html" with icon="arrow-left" %}<span>Back</span></a>
+        <a class="btn btn-warning btn-with-icon" href="{% url 'invoice_edit' invoice.pk %}" title="Edit Invoice">{% include "includes/icon.html" with icon="edit" %}<span>Edit Invoice</span></a>
+        <form method="post" action="{% url 'invoice_clone' invoice.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-outline-info btn-with-icon" type="submit" title="Duplicate Invoice" data-loading-text="Processing...">{% include "includes/icon.html" with icon="copy" %}<span>Duplicate Invoice</span></button>
+        </form>
+        <a class="btn btn-outline-info btn-with-icon" href="{% url 'invoice_preview' invoice.pk %}" title="Preview Invoice">{% include "includes/icon.html" with icon="eye" %}<span>Preview</span></a>
+        <button class="btn btn-outline-info btn-with-icon" type="button" title="Print Invoice" onclick="window.print()">{% include "includes/icon.html" with icon="print" %}<span>Print</span></button>
+        {% if invoice.invoice_status == "Final" and not invoice.is_deleted %}
+            <a class="btn btn-outline-info btn-with-icon" href="{% url 'invoice_pdf_download' invoice.pk %}" title="Download PDF" data-loading-text="Processing...">{% include "includes/icon.html" with icon="download" %}<span>Download PDF</span></a>
+            <a class="btn btn-primary btn-with-icon" href="{% url 'invoice_add_payment' invoice.pk %}" title="Add Payment">{% include "includes/icon.html" with icon="payment" %}<span>Add Payment</span></a>
+        {% endif %}
+        <a class="btn btn-outline-info btn-with-icon" href="{% url 'invoice_payment_history' invoice.pk %}" title="Payment History">{% include "includes/icon.html" with icon="history" %}<span>Payment History</span></a>
+        {% if invoice.is_deleted %}
+            <form method="post" action="{% url 'invoice_restore' invoice.pk %}">
+                {% csrf_token %}
+                <button class="btn btn-primary btn-with-icon" type="submit" title="Restore Invoice">{% include "includes/icon.html" with icon="restore" %}<span>Restore</span></button>
+            </form>
+        {% else %}
+            <a class="btn btn-danger btn-with-icon" href="{% url 'invoice_soft_delete' invoice.pk %}" title="Soft Delete Invoice">{% include "includes/icon.html" with icon="trash" %}<span>Soft Delete</span></a>
+        {% endif %}
+    </div>
+
+    <div class="detail-grid">
+        <div class="detail-item">
+            <span class="detail-label detail-label-with-icon" title="Invoice Number">{% include "includes/icon.html" with icon="invoice" %}<span>Invoice Number</span></span>
+            <strong>{{ invoice.invoice_number }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label detail-label-with-icon" title="Invoice Date">{% include "includes/icon.html" with icon="calendar" %}<span>Invoice Date</span></span>
+            <strong>{{ invoice.invoice_date|date:"d-m-Y" }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label detail-label-with-icon" title="Invoice Status">{% include "includes/icon.html" with icon="status" %}<span>Invoice Status</span></span>
+            <strong><span class="badge-soft {{ invoice.invoice_status|invoice_status_class }}">{{ invoice.invoice_status }}</span></strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label detail-label-with-icon" title="GST Details">{% include "includes/icon.html" with icon="tax" %}<span>GST Type</span></span>
+            <strong>
+                {% if invoice.apply_gst and invoice.gst_amount > 0 %}
+                    <span class="badge-soft badge-info">GST</span>
+                {% else %}
+                    <span class="badge-soft badge-neutral">Non-GST</span>
+                {% endif %}
+            </strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label detail-label-with-icon" title="Currency">{% include "includes/icon.html" with icon="payment" %}<span>Currency</span></span>
+            <strong>{{ invoice.currency }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label detail-label-with-icon" title="Company">{% include "includes/icon.html" with icon="company" %}<span>Company</span></span>
+            <strong>{{ invoice.company.company_name }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label detail-label-with-icon" title="Client Name">{% include "includes/icon.html" with icon="user" %}<span>Client</span></span>
+            <strong>{{ invoice.client.client_name }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label detail-label-with-icon" title="Project">{% include "includes/icon.html" with icon="invoice" %}<span>Project</span></span>
+            {% if invoice.project %}
+                <strong><a href="{% url 'project_detail' invoice.project.pk %}">{{ invoice.project.project_name }}</a></strong>
+            {% else %}
+                <strong>Not linked</strong>
+            {% endif %}
+        </div>
+        <div class="detail-item">
+            <span class="detail-label detail-label-with-icon" title="Due Date">{% include "includes/icon.html" with icon="clock" %}<span>Due Date</span></span>
+            <strong>No data available</strong>
+        </div>
+        <div class="detail-item full">
+            <span class="detail-label detail-label-with-icon" title="Subject">{% include "includes/icon.html" with icon="invoice" %}<span>Subject</span></span>
+            <strong>{{ invoice.subject }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>Invoice Items</h2>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>S.No</th>
+                    <th>Description</th>
+                    <th>HSN/SAC Code</th>
+                    <th class="text-end">Item Price</th>
+                    <th class="text-end">Quantity</th>
+                    <th class="text-end">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in invoice.items.all %}
+                    <tr>
+                        <td>{{ item.serial_number }}</td>
+                        <td>{{ item.description }}</td>
+                        <td>{{ item.hsn_sac_code.code|default:"-" }}</td>
+                        <td class="text-end">{{ item.item_price|currency_format:invoice.currency }}</td>
+                        <td class="text-end">{{ item.quantity|floatformat:2 }}</td>
+                        <td class="text-end">{{ item.total|currency_format:invoice.currency }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="empty-state">No data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="content-section invoice-summary-panel">
+    <h2>Totals</h2>
+    <div class="summary-lines">
+        <div><span class="summary-label" title="Subtotal">{% include "includes/icon.html" with icon="rupee" %}<span>Subtotal</span></span><strong>{{ invoice.subtotal|currency_format:invoice.currency }}</strong></div>
+        {% if invoice.apply_gst and invoice.gst_amount > 0 %}
+            <div><span class="summary-label" title="GST Details">{% include "includes/icon.html" with icon="tax" %}<span>GST @ {{ invoice.gst_percentage|floatformat:2 }}%</span></span><strong>{{ invoice.gst_amount|currency_format:invoice.currency }}</strong></div>
+        {% endif %}
+        <div><span class="summary-label" title="Total Amount">{% include "includes/icon.html" with icon="rupee" %}<span>Grand Total</span></span><strong>{{ invoice.total_amount|currency_format:invoice.currency }}</strong></div>
+        <div><span class="summary-label" title="Amount in Words">{% include "includes/icon.html" with icon="invoice" %}<span>Amount in Words</span></span><strong>{{ invoice.amount_in_words }}</strong></div>
+        <div><span class="summary-label" title="Paid Amount">{% include "includes/icon.html" with icon="payment" %}<span>Total Received</span></span><strong>{{ invoice.received_amount|currency_format:invoice.currency }}</strong></div>
+        <div><span class="summary-label" title="Pending Amount">{% include "includes/icon.html" with icon="clock" %}<span>Pending Amount</span></span><strong>{{ invoice.pending_amount|currency_format:invoice.currency }}</strong></div>
+        <div><span class="summary-label" title="Payment Status">{% include "includes/icon.html" with icon="status" %}<span>Payment Status</span></span><strong>{{ invoice.payment_status }}</strong></div>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <div class="section-heading-row">
+        <h2>Payment History</h2>
+        {% if invoice.invoice_status == "Final" and not invoice.is_deleted %}
+            <a class="btn btn-primary btn-with-icon" href="{% url 'invoice_add_payment' invoice.pk %}" title="Add Payment">{% include "includes/icon.html" with icon="payment" %}<span>Add Payment</span></a>
+        {% endif %}
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Mode</th>
+                    <th>Remarks</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in invoice.payments.all %}
+                    <tr>
+                        <td>{{ payment.payment_date|date:"d-m-Y" }}</td>
+                        <td>{{ payment.received_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ payment.payment_mode }}</td>
+                        <td>{{ payment.remarks|default:"-" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" class="empty-state">No data available</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

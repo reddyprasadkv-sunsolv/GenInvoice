@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Month-wise Summary | Local Invoice Manager{% endblock %}
+{% block page_title %}Month-wise Summary{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Currency</th>
+                    <th>Total Invoices</th>
+                    <th>Raised Amount</th>
+                    <th>Received</th>
+                    <th>Pending</th>
+                    <th>GST</th>
+                    <th>Paid</th>
+                    <th>Pending Count</th>
+                    <th>Partial</th>
+                    <th class="text-end">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td>{{ row.month|date:"F Y" }}</td>
+                        <td>{{ row.currency }}</td>
+                        <td>{{ row.total_invoices }}</td>
+                        <td>{{ row.raised|currency_format:row.currency }}</td>
+                        <td>{{ row.received|currency_format:row.currency }}</td>
+                        <td>{{ row.pending|currency_format:row.currency }}</td>
+                        <td>{{ row.gst|currency_format:row.currency }}</td>
+                        <td>{{ row.paid_count }}</td>
+                        <td>{{ row.pending_count }}</td>
+                        <td>{{ row.partial_count }}</td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-info" href="{% url 'invoice_list' %}?start_date={{ row.month|date:'Y-m-d' }}&end_date={{ row.last_day|date:'Y-m-d' }}&currency={{ row.currency }}" title="View Invoices" aria-label="View Invoices">{% include "includes/icon.html" with icon="invoice" %}</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="11" class="empty-state">No data available</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

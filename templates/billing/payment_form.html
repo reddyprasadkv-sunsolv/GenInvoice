@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Add Payment | Local Invoice Manager{% endblock %}
+{% block page_title %}Add Payment{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="detail-grid">
+        <div class="detail-item">
+            <span class="detail-label">Invoice Number</span>
+            <strong>{{ invoice.invoice_number }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Invoice Currency</span>
+            <strong>{{ invoice.currency }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Grand Total</span>
+            <strong>{{ invoice.total_amount|currency_format:invoice.currency }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Received</span>
+            <strong>{{ invoice.received_amount|currency_format:invoice.currency }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Pending</span>
+            <strong>{{ invoice.pending_amount|currency_format:invoice.currency }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="form-grid">
+            {% for field in form %}
+                <div class="form-group {% if field.name == 'remarks' %}full{% endif %}">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{% url 'invoice_detail' invoice.pk %}">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Payment</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

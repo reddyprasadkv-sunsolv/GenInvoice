@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Edit Recurring Invoice{% else %}Add Recurring Invoice{% endif %} | Local Invoice Manager{% endblock %}
+{% block page_title %}{% if object %}Edit Recurring Invoice{% else %}Add Recurring Invoice{% endif %}{% endblock %}
+
+{% block content %}
+<form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <section class="content-section">
+        <h2 class="form-section-title">Template Details</h2>
+        <div class="form-grid">
+            {% for field in form %}
+                <div class="form-group {% if field.name == 'title' %}full{% endif %}">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {% if field.field.widget.input_type == "checkbox" %}
+                        <div class="form-check">{{ field }}</div>
+                    {% else %}
+                        {{ field }}
+                    {% endif %}
+                    {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="content-section invoice-form-section">
+        <div class="section-heading-row">
+            <h2>Template Items</h2>
+            <button class="btn btn-primary" id="add-recurring-item" type="button">Add Item</button>
+        </div>
+        {{ formset.management_form }}
+        {% if formset.non_form_errors %}
+            <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
+        {% endif %}
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead><tr><th>Description</th><th>HSN/SAC Code</th><th class="amount-cell">Price</th><th class="amount-cell">Quantity</th><th class="text-end">Remove</th></tr></thead>
+                <tbody id="recurring-item-rows">
+                    {% for item_form in formset.forms %}
+                        <tr class="recurring-item-row">
+                            <td>{{ item_form.id }}{{ item_form.description }}{% for error in item_form.description.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</td>
+                            <td>{{ item_form.hsn_sac_code }}{% for error in item_form.hsn_sac_code.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</td>
+                            <td>{{ item_form.item_price }}{% for error in item_form.item_price.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</td>
+                            <td>{{ item_form.quantity }}{% for error in item_form.quantity.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</td>
+                            <td class="text-end"><span class="item-delete-field">{{ item_form.DELETE }}</span><button class="btn btn-sm btn-outline-danger remove-recurring-item" type="button">Remove</button></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <template id="empty-recurring-item-template">
+            <tr class="recurring-item-row">
+                <td>{{ formset.empty_form.description }}</td>
+                <td>{{ formset.empty_form.hsn_sac_code }}</td>
+                <td>{{ formset.empty_form.item_price }}</td>
+                <td>{{ formset.empty_form.quantity }}</td>
+                <td class="text-end"><span class="item-delete-field">{{ formset.empty_form.DELETE }}</span><button class="btn btn-sm btn-outline-danger remove-recurring-item" type="button">Remove</button></td>
+            </tr>
+        </template>
+    </section>
+
+    <div class="form-actions">
+        <a class="btn btn-secondary" href="{% url 'recurring_invoice_list' %}">Cancel</a>
+        <button class="btn btn-primary" type="submit">Save Template</button>
+    </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const totalFormsInput = document.querySelector("input[name='items-TOTAL_FORMS']");
+    const initialFormsInput = document.querySelector("input[name='items-INITIAL_FORMS']");
+    const rowsContainer = document.getElementById("recurring-item-rows");
+    const rowTemplate = document.getElementById("empty-recurring-item-template");
+    const addButton = document.getElementById("add-recurring-item");
+
+    function rowFormIndex(row) {
+        const field = row.querySelector("[name^='items-']");
+        const match = field && field.name.match(/^items-(\d+)-/);
+        return match ? parseInt(match[1], 10) : null;
+    }
+
+    function updateRowFormIndex(row, newIndex) {
+        row.querySelectorAll("input, select, textarea, label").forEach(function (element) {
+            ["name", "id", "for"].forEach(function (attribute) {
+                const value = element.getAttribute(attribute);
+                if (value) {
+                    element.setAttribute(attribute, value.replace(/items-\d+-/g, "items-" + newIndex + "-"));
+                }
+            });
+        });
+    }
+
+    function reindexExtraRows() {
+        const initialCount = parseInt(initialFormsInput.value || "0", 10);
+        let nextIndex = initialCount;
+        rowsContainer.querySelectorAll(".recurring-item-row").forEach(function (row) {
+            const currentIndex = rowFormIndex(row);
+            if (currentIndex !== null && currentIndex >= initialCount) {
+                updateRowFormIndex(row, nextIndex);
+                nextIndex += 1;
+            }
+        });
+        totalFormsInput.value = nextIndex;
+    }
+
+    function bindRow(row) {
+        row.querySelector(".remove-recurring-item").addEventListener("click", function () {
+            const initialCount = parseInt(initialFormsInput.value || "0", 10);
+            const currentIndex = rowFormIndex(row);
+            const checkbox = row.querySelector(".item-delete-field input[type='checkbox']");
+            if (currentIndex !== null && currentIndex < initialCount && checkbox) {
+                checkbox.checked = true;
+                row.hidden = true;
+            } else {
+                row.remove();
+                reindexExtraRows();
+            }
+        });
+    }
+
+    addButton.addEventListener("click", function () {
+        const formIndex = parseInt(totalFormsInput.value, 10);
+        rowsContainer.insertAdjacentHTML("beforeend", rowTemplate.innerHTML.replaceAll("__prefix__", formIndex));
+        totalFormsInput.value = formIndex + 1;
+        bindRow(rowsContainer.lastElementChild);
+    });
+
+    rowsContainer.querySelectorAll(".recurring-item-row").forEach(bindRow);
+});
+</script>
+{% endblock %}

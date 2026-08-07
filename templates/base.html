@@ -1,0 +1,85 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Local Invoice Manager{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/bootstrap-local.css' %}">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+{% if user.is_authenticated %}
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="brand" href="{% url 'dashboard' %}">
+                <span class="brand-mark">LIM</span>
+                <span>Invoice Manager</span>
+            </a>
+            <nav class="nav flex-column">
+                <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">Dashboard</a>
+                <a class="nav-link {% if '/companies/' in request.path %}active{% endif %}" href="{% url 'company_list' %}">Company</a>
+                <a class="nav-link {% if '/clients/' in request.path %}active{% endif %}" href="{% url 'client_list' %}">Client</a>
+                <a class="nav-link {% if '/hsn-sac-codes/' in request.path %}active{% endif %}" href="{% url 'hsn_sac_code_list' %}">HSN/SAC Codes</a>
+                <a class="nav-link {% if '/invoices/' in request.path %}active{% endif %}" href="{% url 'invoice_list' %}">Invoice</a>
+                <a class="nav-link {% if '/recurring-invoices/' in request.path %}active{% endif %}" href="{% url 'recurring_invoice_list' %}">Recurring Invoices</a>
+                <a class="nav-link {% if '/projects/' in request.path %}active{% endif %}" href="{% url 'project_list' %}">Projects</a>
+                <a class="nav-link {% if '/developers-vendors/' in request.path %}active{% endif %}" href="{% url 'developer_vendor_list' %}">Developers / Vendors</a>
+                <a class="nav-link {% if '/summary/' in request.path %}active{% endif %}" href="{% url 'month_summary' %}">Month-wise Summary</a>
+                <a class="nav-link {% if '/reports/' in request.path %}active{% endif %}" href="{% url 'reports' %}">Reports</a>
+                <a class="nav-link {% if '/project-reports/' in request.path %}active{% endif %}" href="{% url 'project_reports' %}">Project Reports</a>
+                <a class="nav-link {% if request.resolver_match.url_name == 'activity_log' %}active{% endif %}" href="{% url 'activity_log' %}">Activity Log</a>
+                {% if request.user.is_superuser %}
+                    <a class="nav-link {% if '/backup/' in request.path %}active{% endif %}" href="{% url 'backup' %}">Backup</a>
+                {% endif %}
+                <a class="nav-link {% if request.resolver_match.url_name == 'settings' %}active{% endif %}" href="{% url 'settings' %}">Settings</a>
+            </nav>
+        </aside>
+        <main class="main-panel">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Local system</p>
+                    <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+                </div>
+                <div class="topbar-actions">
+                    <form class="global-search" method="get" action="{% url 'global_search' %}">
+                        <input class="form-control" type="search" name="q" value="{{ request.GET.q }}" placeholder="Search invoices, clients, projects..." aria-label="Global search">
+                        <button class="btn btn-primary btn-with-icon" type="submit">{% include "includes/icon.html" with icon="filter" %}<span>Search</span></button>
+                    </form>
+                    <details class="user-menu">
+                        <summary class="user-menu-button" aria-label="Account menu" title="Account">
+                            {% include "includes/icon.html" with icon="user" %}
+                        </summary>
+                        <div class="user-dropdown">
+                            <div class="dropdown-user">Signed in as: {{ request.user.username }}</div>
+                            <form method="post" action="{% url 'logout' %}">
+                                {% csrf_token %}
+                                <button class="dropdown-logout-btn" type="submit">Logout</button>
+                            </form>
+                        </div>
+                    </details>
+                </div>
+            </header>
+            <form id="backLogoutForm" method="post" action="{% url 'logout' %}" hidden>
+                {% csrf_token %}
+            </form>
+
+            {% if messages %}
+                <div class="message-stack">
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+{% else %}
+    <main class="auth-shell">
+        {% block auth_content %}{% endblock %}
+    </main>
+{% endif %}
+<script src="{% static 'js/app.js' %}"></script>
+</body>
+</html>

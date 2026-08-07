@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Assign Developer | Local Invoice Manager{% endblock %}
+{% block page_title %}Assign Developer / Vendor{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="detail-grid invoice-form-section">
+        <div class="detail-item">
+            <span class="detail-label">Project</span>
+            <strong>{{ project.project_name }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Client</span>
+            <strong>{{ project.client.client_name }}</strong>
+        </div>
+    </div>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="form-grid">
+            {% for field in form %}
+                <div class="form-group {% if field.name == 'work_description' or field.name == 'remarks' %}full{% endif %}">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{% url 'project_detail' project.pk %}">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Assignment</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

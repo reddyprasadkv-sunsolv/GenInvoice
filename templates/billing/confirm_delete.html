@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm Delete | Local Invoice Manager{% endblock %}
+{% block page_title %}Confirm Delete{% endblock %}
+
+{% block content %}
+<section class="content-section warning-panel">
+    <h2>Delete {{ object_type|title }}</h2>
+    <p class="muted-copy">{{ confirmation_text }}</p>
+    <div class="detail-grid restore-summary">
+        <div class="detail-item full">
+            <span class="detail-label">Selected Record</span>
+            <strong>{{ object_name }}</strong>
+        </div>
+        {% if linked_records %}
+            <div class="detail-item full">
+                <span class="detail-label">Linked Records</span>
+                <p>{{ linked_records }} linked record{{ linked_records|pluralize }} found.</p>
+            </div>
+        {% endif %}
+    </div>
+    {% if warning_message %}
+        <div class="alert alert-warning">{{ warning_message }}</div>
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{{ cancel_url }}">Cancel</a>
+            <button class="btn btn-danger" type="submit">{{ confirm_label }}</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

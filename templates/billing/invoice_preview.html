@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Preview {{ invoice.invoice_number }} | Local Invoice Manager{% endblock %}
+{% block page_title %}Invoice Preview{% endblock %}
+
+{% block content %}
+<div class="section-actions no-print">
+    <a class="btn btn-secondary" href="{% url 'invoice_detail' invoice.pk %}">Back</a>
+    <a class="btn btn-warning" href="{% url 'invoice_edit' invoice.pk %}">Edit Invoice</a>
+    <a class="btn btn-outline-info" href="{% url 'invoice_pdf_download' invoice.pk %}">Download PDF</a>
+    <button class="btn btn-outline-info" type="button" onclick="window.print()">Print Invoice</button>
+</div>
+
+<section class="invoice-preview-a4 invoice-container">
+    <header class="preview-header">
+        <div class="preview-company">
+            {% if invoice.company.logo %}
+                <img class="preview-logo" src="{{ invoice.company.logo.url }}" alt="{{ invoice.company.company_name }} logo">
+            {% endif %}
+            <div>
+                <h2>{{ invoice.company.company_name }}</h2>
+                <p>{{ invoice.company.address|linebreaksbr }}</p>
+                <p>{{ invoice.company.city }}, {{ invoice.company.state }} - {{ invoice.company.pin_code }}</p>
+                <p>{{ invoice.company.country }}</p>
+                {% if invoice.company.gstin %}
+                    <p><strong>GSTIN:</strong> {{ invoice.company.gstin }}</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="preview-meta">
+            <h1>{{ invoice_title }}</h1>
+            <p><strong>No:</strong> {{ invoice.invoice_number }}</p>
+            <p><strong>Date:</strong> {{ invoice.invoice_date|date:"d-m-Y" }}</p>
+            <p><strong>Currency:</strong> {{ invoice.currency }}</p>
+        </div>
+    </header>
+
+    <div class="preview-parties">
+        <div>
+            <span class="detail-label">Bill To</span>
+            <h3>{{ invoice.client.client_name }}</h3>
+            <p>{{ invoice.client.address|linebreaksbr }}</p>
+            <p>{{ invoice.client.city }}, {{ invoice.client.state }} - {{ invoice.client.pin_code }}</p>
+            <p>{{ invoice.client.country }}</p>
+            {% if invoice.client.gstin %}
+                <p><strong>GSTIN:</strong> {{ invoice.client.gstin }}</p>
+            {% endif %}
+        </div>
+        <div>
+            <span class="detail-label">Subject</span>
+            <p>{{ invoice.subject }}</p>
+        </div>
+    </div>
+
+    <table class="preview-table">
+        <thead>
+            <tr>
+                <th>S.No</th>
+                <th>Description</th>
+                <th>HSN/SAC Code</th>
+                <th class="text-end">Item Price</th>
+                <th class="text-end">Quantity</th>
+                <th class="text-end">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in invoice.items.all %}
+                <tr>
+                    <td>{{ item.serial_number }}</td>
+                    <td>{{ item.description }}</td>
+                    <td>{{ item.hsn_sac_code.code|default:"-" }}</td>
+                    <td class="text-end">{{ item.item_price|currency_format:invoice.currency }}</td>
+                    <td class="text-end">{{ item.quantity|floatformat:2 }}</td>
+                    <td class="text-end">{{ item.total|currency_format:invoice.currency }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="preview-total-block">
+        <div><span>Subtotal</span><strong>{{ invoice.subtotal|currency_format:invoice.currency }}</strong></div>
+        {% if invoice.apply_gst and invoice.gst_amount > 0 %}
+            <div><span>GST @ {{ invoice.gst_percentage|floatformat:2 }}%</span><strong>{{ invoice.gst_amount|currency_format:invoice.currency }}</strong></div>
+        {% endif %}
+        <div class="grand"><span>Grand Total</span><strong>{{ invoice.total_amount|currency_format:invoice.currency }}</strong></div>
+    </div>
+
+    <p class="amount-words"><strong>Amount in Words:</strong> {{ invoice.amount_in_words }}</p>
+
+    {% if invoice.company.has_bank_details %}
+        <section class="content-section bank-details-section">
+            <h3>Bank Details</h3>
+            <p><strong>Account Name:</strong> {{ invoice.company.bank_account_display_name }}</p>
+            {% if invoice.company.bank_name %}<p><strong>Bank Name:</strong> {{ invoice.company.bank_name }}</p>{% endif %}
+            {% if invoice.company.bank_account_number %}<p><strong>Account Number:</strong> {{ invoice.company.bank_account_number }}</p>{% endif %}
+            {% if invoice.company.bank_branch %}<p><strong>Branch:</strong> {{ invoice.company.bank_branch }}</p>{% endif %}
+            {% if invoice.company.ifsc_code %}<p><strong>IFSC Code:</strong> {{ invoice.company.ifsc_code }}</p>{% endif %}
+        </section>
+    {% endif %}
+
+    <div class="preview-copy">
+        <div>
+            <h3>Terms and Conditions</h3>
+            <p>{{ invoice.terms_and_conditions|linebreaksbr }}</p>
+        </div>
+        <div>
+            <h3>Declaration</h3>
+            <p>{{ invoice.declaration }}</p>
+        </div>
+    </div>
+
+    <div class="signature-grid">
+        <div>
+            <p>For {{ invoice.company.company_name }}</p>
+            {% if invoice.company.authorized_signature %}
+                <img class="company-signature" src="{{ invoice.company.authorized_signature.url }}" alt="{{ invoice.company.company_name }} authorized signature">
+            {% else %}
+                <div class="signature-line"></div>
+            {% endif %}
+            <strong>Authorized Signature</strong>
+        </div>
+        <div>
+            <div class="signature-line"></div>
+            <p>For {{ invoice.client.client_name }}</p>
+            <strong>Authorized Signature</strong>
+        </div>
+    </div>
+    <p class="computer-generated-note">This is a computer generated invoice.</p>
+</section>
+{% endblock %}

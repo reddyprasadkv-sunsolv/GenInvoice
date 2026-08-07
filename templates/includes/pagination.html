@@ -1,0 +1,29 @@
+{% load billing_extras %}
+{% if is_paginated %}
+    <nav class="pagination-bar" aria-label="Pagination">
+        <div class="pagination-meta">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+                <a class="btn btn-sm btn-secondary" href="?{% query_transform page=page_obj.previous_page_number %}">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+                <a class="btn btn-sm btn-secondary" href="?{% query_transform page=page_obj.next_page_number %}">Next</a>
+            {% endif %}
+        </div>
+        <form class="page-size-form" method="get">
+            {% for key, value in request.GET.items %}
+                {% if key != "page" and key != "page_size" %}
+                    <input type="hidden" name="{{ key }}" value="{{ value }}">
+                {% endif %}
+            {% endfor %}
+            <label class="form-label" for="page-size">Rows</label>
+            <select class="form-control" id="page-size" name="page_size" onchange="this.form.submit()">
+                {% for choice in page_size_choices %}
+                    <option value="{{ choice }}" {% if page_size == choice %}selected{% endif %}>{{ choice }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </nav>
+{% endif %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Project Reports | Local Invoice Manager{% endblock %}
+{% block page_title %}Project Reports{% endblock %}
+
+{% block content %}
+<section class="content-section filter-section">
+    <form method="get" class="filter-grid">
+        {% for field in form %}
+            <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+        <div class="filter-actions">
+            <button class="btn btn-primary btn-with-icon" type="submit" data-loading-text="Processing...">{% include "includes/icon.html" with icon="chart" %}<span>View Report</span></button>
+            <button class="btn btn-outline-info btn-with-icon" formaction="{% url 'project_report_export_excel' %}" type="submit" data-loading-text="Processing...">{% include "includes/icon.html" with icon="table" %}<span>Export Excel</span></button>
+            <button class="btn btn-outline-info btn-with-icon" formaction="{% url 'project_report_export_pdf' %}" type="submit" data-loading-text="Processing...">{% include "includes/icon.html" with icon="file-pdf" %}<span>Export PDF</span></button>
+        </div>
+    </form>
+</section>
+
+<section class="dashboard-grid">
+    {% for currency, item in currency_summaries.items %}
+        <article class="card metric-card"><div class="card-body"><p class="metric-label">Approved Value - {{ currency }}</p><strong class="metric-value">{{ item.approved_value|currency_format:currency }}</strong></div></article>
+        <article class="card metric-card"><div class="card-body"><p class="metric-label">Total With GST - {{ currency }}</p><strong class="metric-value">{{ item.total_with_gst|currency_format:currency }}</strong></div></article>
+        <article class="card metric-card"><div class="card-body"><p class="metric-label">Client Received - {{ currency }}</p><strong class="metric-value">{{ item.client_received|currency_format:currency }}</strong></div></article>
+        <article class="card metric-card"><div class="card-body"><p class="metric-label">Client Pending - {{ currency }}</p><strong class="metric-value">{{ item.client_pending|currency_format:currency }}</strong></div></article>
+    {% endfor %}
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>{{ report_title }}</h2>
+    <div class="table-responsive table-responsive-custom">
+        <table class="table align-middle project-table">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Client</th>
+                    <th>Type</th>
+                    <th>Currency</th>
+                    <th>Approved Quote</th>
+                    <th>GST Type</th>
+                    <th>Base Amount</th>
+                    <th>GST %</th>
+                    <th>GST Applicable Amount</th>
+                    <th>GST Amount</th>
+                    <th>Total With GST</th>
+                    <th>Client Received</th>
+                    <th>Client Pending</th>
+                    <th>Client Fund</th>
+                    <th>Developer / Vendor</th>
+                    <th>Developer Final Cost</th>
+                    <th>Developer Paid</th>
+                    <th>Developer Pending</th>
+                    <th>Developer Fund</th>
+                    <th>Invoice Raised</th>
+                    <th>Invoice Received</th>
+                    <th>Invoice Pending</th>
+                    <th>Status</th>
+                    <th>Completion</th>
+                    <th>Estimated Profit</th>
+                    <th>Approved Profit</th>
+                    <th>Actual Cash Profit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    {% with project=row.project item=row.summary %}
+                        <tr>
+                            <td>{{ project.project_name }}</td>
+                            <td>{{ project.client.client_name }}</td>
+                            <td>{{ project.custom_project_type|default:project.project_type }}</td>
+                            <td>{{ project.currency }}</td>
+                            <td>{{ project.approved_quote|currency_format:project.currency }}</td>
+                            <td>{{ item.gst_type_label }}</td>
+                            <td>{{ item.base_amount|currency_format:project.currency }}</td>
+                            <td>{{ item.gst_percentage|floatformat:2 }}%</td>
+                            <td>{{ item.partial_gst_taxable_amount|currency_format:project.currency }}</td>
+                            <td>{{ item.gst_amount|currency_format:project.currency }}</td>
+                            <td>{{ item.total_with_gst|currency_format:project.currency }}</td>
+                            <td>{{ item.client_received|currency_format:project.currency }}</td>
+                            <td>{{ item.client_pending|currency_format:project.currency }}</td>
+                            <td><span class="badge-soft {{ row.client_fund_status.class }}">{{ row.client_fund_status.label }}</span></td>
+                            <td>{{ item.developer_names }}</td>
+                            <td>{{ item.developer_final_cost|currency_format:project.currency }}</td>
+                            <td>{{ item.developer_paid|currency_format:project.currency }}</td>
+                            <td>{{ item.developer_pending|currency_format:project.currency }}</td>
+                            <td><span class="badge-soft {{ row.developer_fund_status.class }}">{{ row.developer_fund_status.label }}</span></td>
+                            <td>{{ item.invoice_raised|currency_format:project.currency }}</td>
+                            <td>{{ item.invoice_received|currency_format:project.currency }}</td>
+                            <td>{{ item.invoice_pending|currency_format:project.currency }}</td>
+                            <td><span class="badge-soft {{ project.project_status|project_status_class }}">{{ project.project_status }}</span></td>
+                            <td><div class="progress compact-progress"><div class="progress-bar {{ project.completion_percentage|completion_class }}" style="width: {{ project.completion_percentage }}%">{{ project.completion_percentage }}%</div></div></td>
+                            <td>{{ item.estimated_profit|currency_format:project.currency }}</td>
+                            <td>{{ item.approved_profit|currency_format:project.currency }}</td>
+                            <td>{{ item.actual_cash_profit|currency_format:project.currency }}</td>
+                        </tr>
+                    {% endwith %}
+                {% empty %}
+                    <tr><td colspan="27" class="empty-state">No data found for the selected filters.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

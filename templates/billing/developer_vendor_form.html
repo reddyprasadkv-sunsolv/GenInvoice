@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Edit Developer / Vendor{% else %}Add Developer / Vendor{% endif %} | Local Invoice Manager{% endblock %}
+{% block page_title %}{% if object %}Edit Developer / Vendor{% else %}Add Developer / Vendor{% endif %}{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <h2 class="form-section-title">Basic Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.name %}
+            {% include "includes/form_field.html" with field=form.vendor_type %}
+            {% include "includes/form_field.html" with field=form.status %}
+        </div>
+        <h2 class="form-section-title">Contact Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.contact_person %}
+            {% include "includes/form_field.html" with field=form.email %}
+            {% include "includes/form_field.html" with field=form.phone_number %}
+            {% include "includes/form_field.html" with field=form.address full=True %}
+            {% include "includes/form_field.html" with field=form.country %}
+            {% include "includes/form_field.html" with field=form.state %}
+            {% include "includes/form_field.html" with field=form.city %}
+            {% include "includes/form_field.html" with field=form.pin_code %}
+        </div>
+        <h2 class="form-section-title">GST/PAN Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.gstin %}
+            {% include "includes/form_field.html" with field=form.pan %}
+        </div>
+        <h2 class="form-section-title">Bank Details</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.bank_details full=True %}
+        </div>
+        <h2 class="form-section-title">Notes</h2>
+        <div class="form-grid">
+            {% include "includes/form_field.html" with field=form.notes full=True %}
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{% url 'developer_vendor_list' %}">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Developer / Vendor</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

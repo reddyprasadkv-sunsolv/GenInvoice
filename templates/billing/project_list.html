@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Projects | Local Invoice Manager{% endblock %}
+{% block page_title %}Projects{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-primary" href="{% url 'project_add' %}">Add Project</a>
+    </div>
+    <div class="table-responsive table-responsive-custom">
+        <table class="table align-middle project-table">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Client</th>
+                    <th>Type</th>
+                    <th>Billing Type</th>
+                    <th>Currency</th>
+                    <th>Approved Quote</th>
+                    <th>Client Received</th>
+                    <th>Client Pending</th>
+                    <th>Client Fund</th>
+                    <th>Developer / Vendor</th>
+                    <th>Developer Cost</th>
+                    <th>Developer Paid</th>
+                    <th>Developer Pending</th>
+                    <th>Developer Fund</th>
+                    <th>Status</th>
+                    <th>Completion</th>
+                    <th>Profit</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in project_rows %}
+                    {% with project=row.project summary=row.summary %}
+                        <tr>
+                            <td><a href="{% url 'project_detail' project.pk %}">{{ project.project_name }}</a><br><span class="muted-copy">{{ project.project_id }}</span></td>
+                            <td>{{ project.client.client_name }}</td>
+                            <td>{{ project.custom_project_type|default:project.project_type }}</td>
+                            <td>
+                                {% if project.project_type == "Digital Marketing" %}
+                                    <span class="badge-soft {% if project.billing_type == "Recurring" %}badge-info{% else %}badge-neutral{% endif %}">{{ project.billing_type }}</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ project.currency }}</td>
+                            <td>{{ project.approved_quote|currency_format:project.currency }}</td>
+                            <td>{{ summary.client_received|currency_format:project.currency }}</td>
+                            <td>{{ summary.client_pending|currency_format:project.currency }}</td>
+                            <td><span class="badge-soft {{ row.client_fund_status.class }}">{{ row.client_fund_status.label }}</span></td>
+                            <td>{{ summary.developer_names }}</td>
+                            <td>{{ summary.developer_final_cost|currency_format:project.currency }}</td>
+                            <td>{{ summary.developer_paid|currency_format:project.currency }}</td>
+                            <td>{{ summary.developer_pending|currency_format:project.currency }}</td>
+                            <td><span class="badge-soft {{ row.developer_fund_status.class }}">{{ row.developer_fund_status.label }}</span></td>
+                            <td><span class="badge-soft {{ project.project_status|project_status_class }}">{{ project.project_status }}</span></td>
+                            <td>
+                                <div class="progress compact-progress">
+                                    <div class="progress-bar {{ project.completion_percentage|completion_class }}" style="width: {{ project.completion_percentage }}%">{{ project.completion_percentage }}%</div>
+                                </div>
+                            </td>
+                            <td>{{ summary.actual_cash_profit|currency_format:project.currency }}</td>
+                            <td class="text-end action-cell">
+                                <div class="action-icons">
+                                    <a class="icon-btn icon-btn-view" href="{% url 'project_detail' project.pk %}" title="View Project" aria-label="View Project">{% include "includes/icon.html" with icon="eye" %}</a>
+                                    <a class="icon-btn icon-btn-info" href="{% url 'project_ledger' project.pk %}" title="Project Ledger" aria-label="Project Ledger">{% include "includes/icon.html" with icon="chart" %}</a>
+                                    <a class="icon-btn icon-btn-edit" href="{% url 'project_edit' project.pk %}" title="Edit Project" aria-label="Edit Project">{% include "includes/icon.html" with icon="edit" %}</a>
+                                    <a class="icon-btn icon-btn-danger" href="{% url 'project_delete' project.pk %}" title="Delete Project" aria-label="Delete Project">{% include "includes/icon.html" with icon="trash" %}</a>
+                                    <a class="icon-btn icon-btn-success" href="{% url 'project_add_client_payment' project.pk %}" title="Client Payment" aria-label="Client Payment">{% include "includes/icon.html" with icon="payment" %}</a>
+                                    <a class="icon-btn icon-btn-primary" href="{% url 'project_assign_developer' project.pk %}" title="Assign Developer" aria-label="Assign Developer">{% include "includes/icon.html" with icon="user-plus" %}</a>
+                                    <a class="icon-btn icon-btn-info" href="{% url 'project_invoices' project.pk %}" title="View Invoices" aria-label="View Invoices">{% include "includes/icon.html" with icon="invoice" %}</a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endwith %}
+                {% empty %}
+                    <tr><td colspan="17" class="empty-state">No projects found. Add a project to track work and payments.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "includes/pagination.html" %}
+</section>
+{% endblock %}

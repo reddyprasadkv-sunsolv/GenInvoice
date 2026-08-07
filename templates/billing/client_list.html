@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Clients | Local Invoice Manager{% endblock %}
+{% block page_title %}Clients{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-primary" href="{% url 'client_add' %}">Add Client</a>
+    </div>
+    <form class="filter-actions mb-3" method="get">
+        <select class="form-control" name="status" onchange="this.form.submit()">
+            <option value="active" {% if status_filter == "active" %}selected{% endif %}>Active Clients</option>
+            <option value="draft" {% if status_filter == "draft" %}selected{% endif %}>Draft Clients</option>
+            <option value="deleted" {% if status_filter == "deleted" %}selected{% endif %}>Deleted Clients</option>
+            <option value="all" {% if status_filter == "all" %}selected{% endif %}>All Clients</option>
+        </select>
+    </form>
+
+    <div class="table-responsive table-responsive-custom">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Client Name / Company Name</th>
+                    <th>City</th>
+                    <th>State</th>
+                    <th>GSTIN</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for client_record in clients %}
+                    <tr>
+                        <td>{{ client_record.client_name }}</td>
+                        <td>{{ client_record.city }}</td>
+                        <td>{{ client_record.state }}</td>
+                        <td>{{ client_record.gstin|default:"-" }}</td>
+                        <td>
+                            {% if client_record.is_deleted %}
+                                <span class="badge-soft badge-danger">Deleted</span>
+                            {% elif client_record.client_status == "Draft" %}
+                                <span class="badge-soft badge-warning">Draft</span>
+                            {% else %}
+                                <span class="badge-soft badge-success">Active</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-view" href="{% url 'client_detail' client_record.pk %}" title="View Client" aria-label="View Client">{% include "includes/icon.html" with icon="eye" %}</a>
+                                <a class="icon-btn icon-btn-info" href="{% url 'client_ledger' client_record.pk %}" title="Client Ledger" aria-label="Client Ledger">{% include "includes/icon.html" with icon="chart" %}</a>
+                                <a class="icon-btn icon-btn-edit" href="{% url 'client_edit' client_record.pk %}" title="Edit Client" aria-label="Edit Client">{% include "includes/icon.html" with icon="edit" %}</a>
+                                {% if client_record.is_deleted %}
+                                    <form method="post" action="{% url 'client_restore' client_record.pk %}">
+                                        {% csrf_token %}
+                                        <button class="icon-btn icon-btn-restore" type="submit" title="Restore Client" aria-label="Restore Client">{% include "includes/icon.html" with icon="restore" %}</button>
+                                    </form>
+                                {% else %}
+                                    <a class="icon-btn icon-btn-danger" href="{% url 'client_soft_delete' client_record.pk %}" title="Soft Delete Client" aria-label="Soft Delete Client">{% include "includes/icon.html" with icon="trash" %}</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="empty-state">No clients found. Add a client to create invoices.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "includes/pagination.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% load currency_filters %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ report_title }}</title>
+    <style>
+        @page { size: A4; margin: 12mm; }
+        body { color: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 8.6pt; line-height: 1.35; margin: 0; }
+        h1 { font-size: 17pt; margin: 0 0 2mm; }
+        p { margin: 0 0 1.5mm; }
+        .meta, .summary { border: 1px solid #cbd5e1; margin: 4mm 0; padding: 3mm; }
+        .summary { display: table; width: 100%; }
+        .summary div { display: table-cell; }
+        table { border-collapse: collapse; table-layout: fixed; width: 100%; }
+        th, td { border: 1px solid #cbd5e1; padding: 1.6mm; vertical-align: top; word-wrap: break-word; }
+        th { background: #f1f5f9; font-size: 7.6pt; text-transform: uppercase; }
+        .right { text-align: right; white-space: nowrap; }
+    </style>
+</head>
+<body>
+    <h1>{{ report_title }}</h1>
+    <p>Generated: {{ generated_at|date:"d-m-Y H:i" }}</p>
+    <section class="meta">
+        {% for label, value in filter_details %}
+            <p><strong>{{ label }}:</strong> {{ value }}</p>
+        {% empty %}
+            <p>No filters applied.</p>
+        {% endfor %}
+    </section>
+    <section class="summary">
+        {% for currency, item in currency_summaries.items %}
+            <div><strong>{{ currency }} Raised:</strong> {{ item.raised|currency_format:currency }}</div>
+            <div><strong>{{ currency }} Received:</strong> {{ item.received|currency_format:currency }}</div>
+            <div><strong>{{ currency }} Pending:</strong> {{ item.pending|currency_format:currency }}</div>
+            <div><strong>{{ currency }} GST:</strong> {{ item.gst|currency_format:currency }}</div>
+        {% endfor %}
+    </section>
+    {% if report_type == "payment_received" %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Payment Date</th>
+                    <th>Invoice</th>
+                    <th>Client</th>
+                    <th>Currency</th>
+                    <th class="right">Amount</th>
+                    <th>Mode</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in payments %}
+                    <tr>
+                        <td>{{ payment.payment_date|date:"d-m-Y" }}</td>
+                        <td>{{ payment.invoice.invoice_number }}</td>
+                        <td>{{ payment.invoice.client.client_name }}</td>
+                        <td>{{ payment.invoice.currency }}</td>
+                        <td class="right">{{ payment.received_amount|currency_format:payment.invoice.currency }}</td>
+                        <td>{{ payment.payment_mode }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Invoice</th>
+                    <th>Date</th>
+                    <th>Company</th>
+                    <th>Client</th>
+                    <th>Currency</th>
+                    <th class="right">Total</th>
+                    <th>GST Type</th>
+                    <th class="right">Received</th>
+                    <th class="right">Pending</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                    <tr>
+                        <td>{{ invoice.invoice_number }}</td>
+                        <td>{{ invoice.invoice_date|date:"d-m-Y" }}</td>
+                        <td>{{ invoice.company.company_name }}</td>
+                        <td>{{ invoice.client.client_name }}</td>
+                        <td>{{ invoice.currency }}</td>
+                        <td class="right">{{ invoice.total_amount|currency_format:invoice.currency }}</td>
+                        <td>{% if invoice.apply_gst and invoice.gst_amount > 0 %}GST{% else %}Non-GST{% endif %}</td>
+                        <td class="right">{{ invoice.received_amount|currency_format:invoice.currency }}</td>
+                        <td class="right">{{ invoice.pending_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ invoice.payment_status }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</body>
+</html>

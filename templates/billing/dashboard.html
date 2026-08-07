@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Dashboard | Local Invoice Manager{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+{{ dashboard_chart_data|json_script:"dashboard-chart-data" }}
+{% if backup_reminder %}
+    <section class="content-section backup-reminder">
+        <div>
+            <h2>Backup Reminder</h2>
+            <p>{{ backup_reminder.message }}</p>
+        </div>
+        <div class="section-actions">
+            <a class="btn btn-primary btn-with-icon" href="{% url 'backup' %}">{% include "includes/icon.html" with icon="download" %}<span>Create Backup</span></a>
+            <form method="post" action="{% url 'dismiss_backup_reminder' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{% url 'dashboard' %}">
+                <button class="btn btn-secondary" type="submit">Dismiss for Today</button>
+            </form>
+        </div>
+    </section>
+{% endif %}
+<section class="content-section filter-section">
+    <form method="get" class="filter-grid">
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.period.id_for_label }}">Period</label>
+            {{ filter_form.period }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.start_date.id_for_label }}">From</label>
+            {{ filter_form.start_date }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.end_date.id_for_label }}">To</label>
+            {{ filter_form.end_date }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.client.id_for_label }}">Client</label>
+            {{ filter_form.client }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.currency.id_for_label }}">Currency</label>
+            {{ filter_form.currency }}
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="{{ filter_form.payment_status.id_for_label }}">Payment Status</label>
+            {{ filter_form.payment_status }}
+        </div>
+        <div class="filter-actions">
+            <button class="btn btn-primary btn-with-icon" type="submit">{% include "includes/icon.html" with icon="filter" %}<span>Apply</span></button>
+            <a class="btn btn-secondary btn-with-icon" href="{% url 'dashboard' %}">{% include "includes/icon.html" with icon="refresh" %}<span>Reset</span></a>
+        </div>
+    </form>
+</section>
+
+<section class="analytics-card-grid">
+    {% for card in analytics_cards %}
+        <article class="analytics-card {{ card.class }}">
+            <span class="analytics-icon">{{ card.icon }}</span>
+            <div>
+                <p>{{ card.label }}</p>
+                <strong>{{ card.value }}</strong>
+            </div>
+        </article>
+    {% endfor %}
+</section>
+
+<section class="dashboard-grid">
+    {% for card in summary_cards %}
+        <article class="card metric-card">
+            <div class="card-body">
+                <p class="metric-label">{{ card.label }}</p>
+                <strong class="metric-value">{{ card.value }}</strong>
+            </div>
+        </article>
+    {% endfor %}
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>Analytics</h2>
+    <div class="chart-grid">
+        <article class="chart-panel">
+            <h3>Project Status</h3>
+            <div id="project-status-chart"></div>
+        </article>
+        <article class="chart-panel">
+            <h3>Invoice Payment Status</h3>
+            <div id="invoice-payment-chart"></div>
+        </article>
+        <article class="chart-panel">
+            <h3>Client Receivable vs Developer Payable</h3>
+            <div id="fund-status-chart"></div>
+        </article>
+        <article class="chart-panel">
+            <h3>Monthly Invoice Raised vs Received</h3>
+            <div id="monthly-invoice-chart"></div>
+        </article>
+        <article class="chart-panel">
+            <h3>Profit Summary</h3>
+            <div id="profit-summary-chart"></div>
+        </article>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <div class="section-heading-row">
+        <h2>Upcoming Recurring Invoices</h2>
+        <a class="btn btn-outline-info" href="{% url 'recurring_invoice_list' %}">Manage</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Template</th><th>Client</th><th>Next Invoice Date</th><th>Frequency</th><th class="text-end">Action</th></tr></thead>
+            <tbody>
+                {% for template in upcoming_recurring_templates %}
+                    <tr>
+                        <td>{{ template.title }}</td>
+                        <td>{{ template.client.client_name }}</td>
+                        <td>{{ template.next_invoice_date|date:"d-m-Y" }}</td>
+                        <td>{{ template.frequency }}</td>
+                        <td class="text-end action-cell">
+                            <form method="post" action="{% url 'recurring_invoice_generate' template.pk %}">
+                                {% csrf_token %}
+                                <button class="btn btn-primary btn-with-icon" type="submit" data-loading-text="Processing...">{% include "includes/icon.html" with icon="invoice" %}<span>Generate Draft Invoice</span></button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="empty-state">No upcoming recurring invoices in the next 30 days.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <div class="section-heading-row">
+        <h2>Recent Activity</h2>
+        <a class="btn btn-outline-info" href="{% url 'activity_log' %}">View All</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Time</th><th>Module</th><th>Action</th><th>Description</th></tr></thead>
+            <tbody>
+                {% for activity in recent_activities %}
+                    <tr>
+                        <td>{{ activity.created_at|date:"d-m-Y H:i" }}</td>
+                        <td>{{ activity.module }}</td>
+                        <td><span class="badge-soft badge-info">{{ activity.action }}</span></td>
+                        <td>{{ activity.description|default:"-" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="empty-state">No activity recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>Project Summary</h2>
+</section>
+
+<section class="dashboard-grid">
+    {% for card in project_summary_cards %}
+        <article class="card metric-card">
+            <div class="card-body">
+                <p class="metric-label">{{ card.label }}</p>
+                <strong class="metric-value">{{ card.value }}</strong>
+            </div>
+        </article>
+    {% endfor %}
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>Recent Invoices</h2>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Invoice Number</th>
+                    <th>Date</th>
+                    <th>Client</th>
+                    <th>Currency</th>
+                    <th>Total</th>
+                    <th>Received</th>
+                    <th>Pending</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in recent_invoices %}
+                    <tr>
+                        <td><a href="{% url 'invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></td>
+                        <td>{{ invoice.invoice_date|date:"d-m-Y" }}</td>
+                        <td>{{ invoice.client.client_name }}</td>
+                        <td>{{ invoice.currency }}</td>
+                        <td>{{ invoice.total_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ invoice.received_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ invoice.pending_amount|currency_format:invoice.currency }}</td>
+                        <td><span class="badge-soft {{ invoice.payment_status|invoice_status_class }}">{{ invoice.payment_status }}</span></td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="8" class="empty-state">No data available</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const chartData = JSON.parse(document.getElementById("dashboard-chart-data").textContent);
+    const moneyFormatter = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
+
+    function total(values) {
+        return values.reduce((sum, value) => sum + Number(value || 0), 0);
+    }
+
+    function emptyMessage(container) {
+        container.innerHTML = '<p class="empty-chart">No data available</p>';
+    }
+
+    function legendHtml(labels, values, colors, formatter) {
+        return '<div class="chart-legend">' + labels.map(function (label, index) {
+            const value = formatter ? formatter(values[index]) : values[index];
+            return '<span><i style="background:' + colors[index] + '"></i>' + label + ': ' + value + '</span>';
+        }).join("") + '</div>';
+    }
+
+    function renderDoughnut(elementId, chart) {
+        const container = document.getElementById(elementId);
+        if (!container || total(chart.values) <= 0) {
+            if (container) emptyMessage(container);
+            return;
+        }
+        let start = 0;
+        const sum = total(chart.values);
+        const gradient = chart.values.map(function (value, index) {
+            const end = start + (Number(value || 0) / sum * 100);
+            const segment = chart.colors[index] + ' ' + start.toFixed(2) + '% ' + end.toFixed(2) + '%';
+            start = end;
+            return segment;
+        }).join(", ");
+        container.innerHTML = '<div class="doughnut-chart" style="background: conic-gradient(' + gradient + ')"><span>' + sum + '</span></div>' + legendHtml(chart.labels, chart.values, chart.colors);
+    }
+
+    function renderSingleBarChart(elementId, chart, formatter) {
+        const container = document.getElementById(elementId);
+        if (!container || total(chart.values.map(Math.abs)) <= 0) {
+            if (container) emptyMessage(container);
+            return;
+        }
+        const maxValue = Math.max.apply(null, chart.values.map(function (value) { return Math.abs(Number(value || 0)); })) || 1;
+        container.innerHTML = '<div class="bar-chart">' + chart.labels.map(function (label, index) {
+            const value = Number(chart.values[index] || 0);
+            const width = Math.max(Math.abs(value) / maxValue * 100, value === 0 ? 0 : 5);
+            return '<div class="bar-row"><span>' + label + '</span><div class="bar-track"><div class="bar-fill" style="width:' + width + '%; background:' + chart.colors[index] + '"></div></div><strong>' + formatter(value) + '</strong></div>';
+        }).join("") + '</div>';
+    }
+
+    function renderGroupedBarChart(elementId, chart) {
+        const container = document.getElementById(elementId);
+        const allValues = chart.series.flatMap(function (series) { return series.values; });
+        if (!container || total(allValues.map(Math.abs)) <= 0) {
+            if (container) emptyMessage(container);
+            return;
+        }
+        const maxValue = Math.max.apply(null, allValues.map(function (value) { return Math.abs(Number(value || 0)); })) || 1;
+        container.innerHTML = '<div class="grouped-chart">' + chart.labels.map(function (label, index) {
+            const bars = chart.series.map(function (series) {
+                const value = Number(series.values[index] || 0);
+                const height = Math.max(Math.abs(value) / maxValue * 100, value === 0 ? 0 : 4);
+                return '<span title="' + series.label + ': ' + moneyFormatter.format(value) + '" style="height:' + height + '%; background:' + series.color + '"></span>';
+            }).join("");
+            return '<div class="grouped-bar"><div class="group-bars">' + bars + '</div><strong>' + label + '</strong></div>';
+        }).join("") + '</div>' + legendHtml(chart.series.map(function (series) { return series.label; }), chart.series.map(function () { return ""; }), chart.series.map(function (series) { return series.color; }));
+    }
+
+    renderDoughnut("project-status-chart", chartData.projectStatus);
+    renderDoughnut("invoice-payment-chart", chartData.invoicePaymentStatus);
+    renderSingleBarChart("fund-status-chart", chartData.fundStatus, function (value) { return moneyFormatter.format(value); });
+    renderGroupedBarChart("monthly-invoice-chart", chartData.monthlyInvoice);
+    renderSingleBarChart("profit-summary-chart", chartData.profitSummary, function (value) { return moneyFormatter.format(value); });
+});
+</script>
+{% endblock %}

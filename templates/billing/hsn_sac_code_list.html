@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}HSN/SAC Codes | Local Invoice Manager{% endblock %}
+{% block page_title %}HSN/SAC Codes{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-primary" href="{% url 'hsn_sac_code_add' %}">Add HSN/SAC Code</a>
+    </div>
+
+    <div class="table-responsive table-responsive-custom">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Description</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for code in codes %}
+                    <tr>
+                        <td>{{ code.code }}</td>
+                        <td>{{ code.description|default:"-" }}</td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-edit" href="{% url 'hsn_sac_code_edit' code.pk %}" title="Edit HSN/SAC Code" aria-label="Edit HSN/SAC Code">{% include "includes/icon.html" with icon="edit" %}</a>
+                                <a class="icon-btn icon-btn-danger" href="{% url 'hsn_sac_code_delete' code.pk %}" title="Delete HSN/SAC Code" aria-label="Delete HSN/SAC Code">{% include "includes/icon.html" with icon="trash" %}</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="3" class="empty-state">No HSN/SAC codes found. Add a code to reuse it in invoice items.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "includes/pagination.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}{{ project.project_name }} | Local Invoice Manager{% endblock %}
+{% block page_title %}Project Details{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-secondary" href="{% url 'project_list' %}">Back</a>
+        <a class="btn btn-outline-info btn-with-icon" href="{% url 'project_ledger' project.pk %}">{% include "includes/icon.html" with icon="chart" %}<span>Project Ledger</span></a>
+        <a class="btn btn-warning" href="{% url 'project_edit' project.pk %}">Edit Project</a>
+        <a class="btn btn-danger" href="{% url 'project_delete' project.pk %}">Delete</a>
+        <a class="btn btn-primary" href="{% url 'project_add_client_payment' project.pk %}">Add Client Payment</a>
+        <a class="btn btn-primary" href="{% url 'project_assign_developer' project.pk %}">Assign Developer</a>
+        <a class="btn btn-outline-info" href="{% url 'project_invoices' project.pk %}">View Invoices</a>
+    </div>
+    <div class="detail-grid">
+        <div class="detail-item">
+            <span class="detail-label">Project ID</span>
+            <strong>{{ project.project_id }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Project Name</span>
+            <strong>{{ project.project_name }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Client</span>
+            <strong>{{ project.client.client_name }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Project Type</span>
+            <strong>{{ project.custom_project_type|default:project.project_type }}</strong>
+        </div>
+        {% if project.project_type == "Digital Marketing" %}
+            <div class="detail-item">
+                <span class="detail-label">Project Billing Type</span>
+                <strong><span class="badge-soft {% if project.billing_type == "Recurring" %}badge-info{% else %}badge-neutral{% endif %}">{{ project.billing_type }}</span></strong>
+            </div>
+        {% endif %}
+        <div class="detail-item">
+            <span class="detail-label">Status</span>
+            <strong><span class="badge-soft {{ project.project_status|project_status_class }}">{{ project.project_status }}</span></strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Completion</span>
+            <div class="progress compact-progress">
+                <div class="progress-bar {{ project.completion_percentage|completion_class }}" style="width: {{ project.completion_percentage }}%">{{ project.completion_percentage }}%</div>
+            </div>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Start Date</span>
+            <strong>{{ project.start_date|date:"d-m-Y"|default:"-" }}</strong>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Expected Completion</span>
+            <strong>{{ project.expected_completion_date|date:"d-m-Y"|default:"-" }}</strong>
+        </div>
+        <div class="detail-item full">
+            <span class="detail-label">Requirement</span>
+            <p>{{ project.project_requirement|linebreaksbr }}</p>
+        </div>
+        <div class="detail-item full">
+            <span class="detail-label">Remarks</span>
+            <p>{{ project.remarks|default:"-"|linebreaksbr }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="dashboard-grid">
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Project Currency</p><strong class="metric-value">{{ project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Approved Client Amount</p><strong class="metric-value">{{ project.approved_quote|currency_format:project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">GST Type</p><strong class="metric-value metric-value-text">{{ project_gst_summary.gst_type_label }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Base Amount</p><strong class="metric-value">{{ project_base_amount|currency_format:project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">GST Percentage</p><strong class="metric-value">{{ project_gst_summary.gst_percentage|floatformat:2 }}%</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">GST Applicable Amount</p><strong class="metric-value">{{ project_gst_summary.partial_gst_taxable_amount|currency_format:project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">GST Amount</p><strong class="metric-value">{{ project_gst_amount|currency_format:project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Total With GST</p><strong class="metric-value">{{ project_total_with_gst|currency_format:project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Client Amount Received</p><strong class="metric-value">{{ summary.client_received|currency_format:project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Client Pending</p><strong class="metric-value">{{ project_client_pending_amount|currency_format:project.currency }}</strong><span class="badge-soft {{ client_fund_status.class }}">{{ client_fund_status.label }}</span></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Developer Final Cost</p><strong class="metric-value">{{ summary.developer_final_cost|currency_format:project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Developer Amount Paid</p><strong class="metric-value">{{ summary.developer_paid|currency_format:project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Developer Pending Amount</p><strong class="metric-value">{{ summary.developer_pending|currency_format:project.currency }}</strong><span class="badge-soft {{ developer_fund_status.class }}">{{ developer_fund_status.label }}</span></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Approved Profit</p><strong class="metric-value">{{ summary.approved_profit|currency_format:project.currency }}</strong></div></article>
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Actual Cash Profit</p><strong class="metric-value">{{ summary.actual_cash_profit|currency_format:project.currency }}</strong></div></article>
+</section>
+
+<section class="content-section invoice-form-section">
+    <div class="section-heading-row">
+        <h2>Client Payment History</h2>
+        <a class="btn btn-primary" href="{% url 'project_add_client_payment' project.pk %}">Add Payment</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Type</th><th>Remarks</th><th class="text-end">Action</th></tr></thead>
+            <tbody>
+                {% for payment in project.client_payments.all %}
+                    <tr>
+                        <td>{{ payment.payment_date|date:"d-m-Y" }}</td>
+                        <td>{{ payment.amount_received|currency_format:project.currency }}</td>
+                        <td>{{ payment.payment_mode }}</td>
+                        <td>{{ payment.payment_type }}</td>
+                        <td>{{ payment.remarks|default:"-" }}</td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-edit" href="{% url 'project_edit_client_payment' project.pk payment.pk %}" title="Edit Client Payment" aria-label="Edit Client Payment">{% include "includes/icon.html" with icon="edit" %}</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="empty-state">No data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <div class="section-heading-row">
+        <h2>Developer / Vendor Assignments</h2>
+        <a class="btn btn-primary" href="{% url 'project_assign_developer' project.pk %}">Assign Developer</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Developer / Vendor</th>
+                    <th>Role</th>
+                    <th>Final Cost</th>
+                    <th>Paid</th>
+                    <th>Pending</th>
+                    <th>Status</th>
+                    <th class="text-end">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for assignment in project.assignments.all %}
+                    <tr>
+                        <td>{{ assignment.developer_vendor.name }}</td>
+                        <td>{{ assignment.assigned_role }}</td>
+                        <td>{{ assignment.developer_final_project_cost|currency_format:project.currency }}</td>
+                        <td>{{ assignment.total_amount_paid_to_developer|currency_format:project.currency }}</td>
+                        <td>{{ assignment.pending_amount_to_developer|currency_format:project.currency }}</td>
+                        <td><span class="badge-soft {{ assignment.assignment_status|project_status_class }}">{{ assignment.assignment_status }}</span></td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-success" href="{% url 'assignment_add_developer_payment' assignment.pk %}" title="Add Developer Payment" aria-label="Add Developer Payment">{% include "includes/icon.html" with icon="payment" %}</a>
+                                <form method="post" action="{% url 'project_assignment_delete' project.pk assignment.pk %}" onsubmit="return confirm('Are you sure you want to delete this developer/vendor assignment?');">
+                                    {% csrf_token %}
+                                    <button class="icon-btn icon-btn-danger" type="submit" title="Delete Assignment" aria-label="Delete Assignment">{% include "includes/icon.html" with icon="trash" %}</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% for payment in assignment.developer_payments.all %}
+                        <tr class="subtle-row">
+                            <td colspan="2">{{ payment.payment_date|date:"d-m-Y" }} - {{ payment.payment_type }}</td>
+                            <td colspan="2">Paid {{ payment.amount_paid|currency_format:project.currency }} via {{ payment.payment_mode }}</td>
+                            <td colspan="3">{{ payment.remarks|default:"-" }}</td>
+                        </tr>
+                    {% endfor %}
+                {% empty %}
+                    <tr><td colspan="7" class="empty-state">No data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>Invoices Raised for This Project</h2>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Invoice</th><th>Date</th><th>Total</th><th>Received</th><th>Pending</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for invoice in project.invoices.all %}
+                    <tr>
+                        <td><a href="{% url 'invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></td>
+                        <td>{{ invoice.invoice_date|date:"d-m-Y" }}</td>
+                        <td>{{ invoice.total_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ invoice.received_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ invoice.pending_amount|currency_format:invoice.currency }}</td>
+                        <td><span class="badge-soft {{ invoice.payment_status|invoice_status_class }}">{{ invoice.payment_status }}</span></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="empty-state">No data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

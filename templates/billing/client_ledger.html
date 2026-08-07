@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Client Ledger | Local Invoice Manager{% endblock %}
+{% block page_title %}Client Ledger{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-secondary" href="{% url 'client_detail' client_record.pk %}">Back</a>
+        <a class="btn btn-warning" href="{% url 'client_edit' client_record.pk %}">Edit Client</a>
+    </div>
+    <div class="detail-grid">
+        <div class="detail-item full"><span class="detail-label">Client</span><strong>{{ client_record.client_name }}</strong></div>
+        <div class="detail-item"><span class="detail-label">GSTIN</span><strong>{{ client_record.gstin|default:"-" }}</strong></div>
+        <div class="detail-item"><span class="detail-label">City</span><strong>{{ client_record.city|default:"-" }}</strong></div>
+    </div>
+</section>
+
+<section class="dashboard-grid">
+    {% for currency, item in currency_summaries.items %}
+        <article class="card metric-card"><div class="card-body"><p class="metric-label">Total invoices raised - {{ currency }}</p><strong class="metric-value">{{ item.raised|currency_format:currency }}</strong></div></article>
+        <article class="card metric-card"><div class="card-body"><p class="metric-label">Total received - {{ currency }}</p><strong class="metric-value">{{ item.received|currency_format:currency }}</strong></div></article>
+        <article class="card metric-card"><div class="card-body"><p class="metric-label">Total pending - {{ currency }}</p><strong class="metric-value">{{ item.pending|currency_format:currency }}</strong></div></article>
+    {% endfor %}
+    <article class="card metric-card"><div class="card-body"><p class="metric-label">Pending receivables</p><strong class="metric-value">{{ pending_receivables|length }}</strong></div></article>
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>Invoices</h2>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Invoice</th><th>Date</th><th>Company</th><th class="amount-cell">Total</th><th class="amount-cell">Received</th><th class="amount-cell">Pending</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for invoice in invoices %}
+                    <tr>
+                        <td><a href="{% url 'invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></td>
+                        <td>{{ invoice.invoice_date|date:"d-m-Y" }}</td>
+                        <td>{{ invoice.company.company_name }}</td>
+                        <td class="amount-cell">{{ invoice.total_amount|currency_format:invoice.currency }}</td>
+                        <td class="amount-cell">{{ invoice.received_amount|currency_format:invoice.currency }}</td>
+                        <td class="amount-cell">{{ invoice.pending_amount|currency_format:invoice.currency }}</td>
+                        <td><span class="badge-soft {{ invoice.payment_status|invoice_status_class }}">{{ invoice.payment_status }}</span></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="empty-state">No invoices found for this client.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>Payments</h2>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Date</th><th>Invoice</th><th class="amount-cell">Amount</th><th>Mode</th><th>Remarks</th></tr></thead>
+            <tbody>
+                {% for payment in payments %}
+                    <tr>
+                        <td>{{ payment.payment_date|date:"d-m-Y" }}</td>
+                        <td><a href="{% url 'invoice_detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a></td>
+                        <td class="amount-cell">{{ payment.received_amount|currency_format:payment.invoice.currency }}</td>
+                        <td>{{ payment.payment_mode }}</td>
+                        <td>{{ payment.remarks|default:"-" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="empty-state">No payment history found for this client.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="content-section invoice-form-section">
+    <h2>Linked Projects</h2>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Project</th><th>Status</th><th class="amount-cell">Approved Quote</th><th class="amount-cell">Client Received</th><th class="amount-cell">Client Pending</th></tr></thead>
+            <tbody>
+                {% for project in projects %}
+                    <tr>
+                        <td><a href="{% url 'project_detail' project.pk %}">{{ project.project_name }}</a></td>
+                        <td><span class="badge-soft {{ project.project_status|project_status_class }}">{{ project.project_status }}</span></td>
+                        <td class="amount-cell">{{ project.approved_quote|currency_format:project.currency }}</td>
+                        <td class="amount-cell">{{ project.client_total_amount_received|currency_format:project.currency }}</td>
+                        <td class="amount-cell">{{ project.client_pending_amount|currency_format:project.currency }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="empty-state">No projects found for this client.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

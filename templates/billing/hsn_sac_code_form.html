@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Edit HSN/SAC Code{% else %}Add HSN/SAC Code{% endif %} | Local Invoice Manager{% endblock %}
+{% block page_title %}{% if object %}Edit HSN/SAC Code{% else %}Add HSN/SAC Code{% endif %}{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="form-grid">
+            {% for field in form %}
+                <div class="form-group {% if field.name == 'description' %}full{% endif %}">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-secondary" href="{% url 'hsn_sac_code_list' %}">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save HSN/SAC Code</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

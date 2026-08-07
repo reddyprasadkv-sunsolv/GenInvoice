@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load billing_extras currency_filters %}
+
+{% block title %}Project Invoices | Local Invoice Manager{% endblock %}
+{% block page_title %}Project Invoices{% endblock %}
+
+{% block content %}
+<section class="content-section">
+    <div class="section-actions">
+        <a class="btn btn-secondary" href="{% url 'project_detail' project.pk %}">Back to Project</a>
+        <a class="btn btn-primary" href="{% url 'invoice_add' %}">Create Invoice</a>
+    </div>
+    <div class="detail-grid invoice-form-section">
+        <div class="detail-item"><span class="detail-label">Project</span><strong>{{ project.project_name }}</strong></div>
+        <div class="detail-item"><span class="detail-label">Client</span><strong>{{ project.client.client_name }}</strong></div>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Invoice Number</th>
+                    <th>Date</th>
+                    <th>Company</th>
+                    <th>Total</th>
+                    <th>Received</th>
+                    <th>Pending</th>
+                    <th>Invoice Status</th>
+                    <th>GST Type</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                    <tr>
+                        <td>{{ invoice.invoice_number }}</td>
+                        <td>{{ invoice.invoice_date|date:"d-m-Y" }}</td>
+                        <td>{{ invoice.company.company_name }}</td>
+                        <td>{{ invoice.total_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ invoice.received_amount|currency_format:invoice.currency }}</td>
+                        <td>{{ invoice.pending_amount|currency_format:invoice.currency }}</td>
+                        <td><span class="badge-soft {{ invoice.invoice_status|invoice_status_class }}">{{ invoice.invoice_status }}</span></td>
+                        <td>{% if invoice.apply_gst and invoice.gst_amount > 0 %}<span class="badge-soft badge-info">GST</span>{% else %}<span class="badge-soft badge-neutral">Non-GST</span>{% endif %}</td>
+                        <td><span class="badge-soft {{ invoice.payment_status|invoice_status_class }}">{{ invoice.payment_status }}</span></td>
+                        <td class="text-end action-cell">
+                            <div class="action-icons">
+                                <a class="icon-btn icon-btn-view" href="{% url 'invoice_detail' invoice.pk %}" title="View Invoice" aria-label="View Invoice">{% include "includes/icon.html" with icon="eye" %}</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="10" class="empty-state">No data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

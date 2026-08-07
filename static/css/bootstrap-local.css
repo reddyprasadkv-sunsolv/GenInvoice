@@ -1,0 +1,252 @@
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 1rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+a {
+    color: #2563eb;
+}
+
+h1,
+h2,
+h3,
+p {
+    margin-top: 0;
+}
+
+img,
+svg {
+    vertical-align: middle;
+}
+
+button,
+input,
+textarea {
+    font: inherit;
+}
+
+.container,
+.container-fluid {
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: .75rem;
+    padding-right: .75rem;
+    width: 100%;
+}
+
+.container {
+    max-width: 1140px;
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-left: -.5rem;
+    margin-right: -.5rem;
+}
+
+.card {
+    background: #ffffff;
+    border: 1px solid #d9e1ea;
+    border-radius: .5rem;
+}
+
+.card-body {
+    padding: 1rem;
+}
+
+.btn {
+    align-items: center;
+    border: 1px solid transparent;
+    border-radius: .45rem;
+    cursor: pointer;
+    display: inline-flex;
+    font-weight: 700;
+    justify-content: center;
+    line-height: 1.2;
+    min-height: 2.5rem;
+    padding: .55rem .85rem;
+    text-align: center;
+    text-decoration: none;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    white-space: nowrap;
+}
+
+.btn-sm {
+    font-size: .88rem;
+    min-height: 2rem;
+    padding: .35rem .6rem;
+}
+
+.btn-primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #ffffff;
+}
+
+.btn-outline-secondary {
+    background: #ffffff;
+    border-color: #b8c4d2;
+    color: #344054;
+}
+
+.btn-outline-secondary:hover,
+.btn-outline-secondary:focus {
+    background: #eef2f6;
+    color: #1f2937;
+}
+
+.btn-outline-light {
+    background: transparent;
+    border-color: rgba(255, 255, 255, .55);
+    color: #ffffff;
+}
+
+.btn-outline-light:hover,
+.btn-outline-light:focus {
+    background: rgba(255, 255, 255, .12);
+    color: #ffffff;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-label {
+    display: inline-block;
+    font-weight: 700;
+    margin-bottom: .35rem;
+}
+
+.form-control {
+    appearance: none;
+    background: #ffffff;
+    border: 1px solid #b8c4d2;
+    border-radius: .45rem;
+    color: #1f2937;
+    display: block;
+    line-height: 1.5;
+    padding: .6rem .7rem;
+    width: 100%;
+}
+
+.form-control:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 .18rem rgba(37, 99, 235, .14);
+    outline: 0;
+}
+
+.form-text {
+    color: #667085;
+    font-size: .875rem;
+    margin-top: .3rem;
+}
+
+.invalid-feedback {
+    color: #b42318;
+    font-size: .875rem;
+    margin-top: .3rem;
+}
+
+.d-block {
+    display: block !important;
+}
+
+.w-100 {
+    width: 100% !important;
+}
+
+.nav {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding-left: 0;
+}
+
+.flex-column {
+    flex-direction: column;
+}
+
+.nav-link {
+    display: block;
+    text-decoration: none;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.table {
+    border-collapse: collapse;
+    margin-bottom: 0;
+    width: 100%;
+}
+
+.table th,
+.table td {
+    border-bottom: 1px solid #d9e1ea;
+    padding: .85rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.table thead th {
+    color: #667085;
+    font-size: .78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.align-middle td {
+    vertical-align: middle;
+}
+
+.text-end {
+    text-align: right !important;
+}
+
+.alert {
+    border: 1px solid transparent;
+    border-radius: .45rem;
+    margin-bottom: .75rem;
+    padding: .75rem .9rem;
+}
+
+.alert-success {
+    background: #e8f7ee;
+    border-color: #bfe6cd;
+    color: #176c35;
+}
+
+.alert-error,
+.alert-danger {
+    background: #fef3f2;
+    border-color: #fecdca;
+    color: #b42318;
+}
+
+.alert-info {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e40af;
+}
