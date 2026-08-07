@@ -4151,3 +4151,92 @@ class ProductionSettingsHardeningTests(TestCase):
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("HSTS_OPT_IN", res.stdout)
 
+
+class PostgreSQLSettingsTests(TestCase):
+    def _run_settings_script(self, env_vars, code_snippet):
+        import subprocess
+        import sys
+
+        env = os.environ.copy()
+        for key in [
+            "DATABASE_URL",
+            "DJANGO_DB_ENGINE",
+            "DJANGO_DB_NAME",
+            "DJANGO_DB_USER",
+            "DJANGO_DB_PASSWORD",
+            "DJANGO_DB_HOST",
+            "DJANGO_DB_PORT",
+            "DJANGO_DB_CONN_MAX_AGE",
+            "CONN_MAX_AGE",
+            "DJANGO_DB_SSLMODE",
+            "DB_SSLMODE",
+        ]:
+            env.pop(key, None)
+        env.update(env_vars)
+
+        cmd = [
+            sys.executable,
+            "-c",
+            f"import os, sys; from invoice_manager import settings; {code_snippet}",
+        ]
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_database_url_postgresql_parsing(self):
+        res = self._run_settings_script(
+            {
+                "DATABASE_URL": "postgres://pguser%40app:secure%40pass%3Aword%2F123@dbserver:5432/invoice%5Fdb?sslmode=require",
+                "DJANGO_DB_CONN_MAX_AGE": "120",
+            },
+            "db = settings.DATABASES['default']\n"
+            "assert db['ENGINE'] == 'django.db.backends.postgresql'\n"
+            "assert db['NAME'] == 'invoice_db'\n"
+            "assert db['USER'] == 'pguser@app'\n"
+            "assert db['PASSWORD'] == 'secure@pass:word/123'\n"
+            "assert db['HOST'] == 'dbserver'\n"
+            "assert db['PORT'] == '5432'\n"
+            "assert db['CONN_MAX_AGE'] == 120\n"
+            "assert db['OPTIONS']['sslmode'] == 'require'\n"
+            "print('PG_URL_PARSED')",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("PG_URL_PARSED", res.stdout)
+
+    def test_django_db_engine_postgresql_parsing(self):
+        res = self._run_settings_script(
+            {
+                "DJANGO_DB_ENGINE": "postgresql",
+                "DJANGO_DB_NAME": "custom_db",
+                "DJANGO_DB_USER": "custom_user",
+                "DJANGO_DB_PASSWORD": "custom_password",
+                "DJANGO_DB_HOST": "custom_host",
+                "DJANGO_DB_PORT": "5433",
+                "DJANGO_DB_SSLMODE": "prefer",
+            },
+            "db = settings.DATABASES['default']\n"
+            "assert db['ENGINE'] == 'django.db.backends.postgresql'\n"
+            "assert db['NAME'] == 'custom_db'\n"
+            "assert db['USER'] == 'custom_user'\n"
+            "assert db['PASSWORD'] == 'custom_password'\n"
+            "assert db['HOST'] == 'custom_host'\n"
+            "assert db['PORT'] == '5433'\n"
+            "assert db['OPTIONS']['sslmode'] == 'prefer'\n"
+            "print('PG_ENGINE_PARSED')",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("PG_ENGINE_PARSED", res.stdout)
+
+    def test_sqlite_fallback_default(self):
+        res = self._run_settings_script(
+            {},
+            "db = settings.DATABASES['default']\n"
+            "assert db['ENGINE'] == 'django.db.backends.sqlite3'\n"
+            "print('SQLITE_DEFAULT')",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("SQLITE_DEFAULT", res.stdout)
+
