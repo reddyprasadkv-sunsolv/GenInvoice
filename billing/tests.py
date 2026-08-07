@@ -1,11 +1,14 @@
 import io
+import json
 import os
 import struct
 import shutil
 import tempfile
 import zipfile
 from datetime import date, timedelta
+from pathlib import Path
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -49,6 +52,18 @@ from .services import (
     project_financial_summary,
     project_status_badge_class,
     recalculate_project_client_payments,
+)
+from .backup import (
+    DATABASE_ARCNAME,
+    MANIFEST_ARCNAME,
+    SETTINGS_ARCNAME,
+    BackupError,
+    RestoreError,
+    RestoreValidationError,
+    create_local_backup,
+    list_local_backups,
+    restore_local_backup,
+    validate_backup_zip,
 )
 from .templatetags.currency_filters import format_currency, format_inr
 
@@ -3699,3 +3714,173 @@ class DraftInvoiceNumberSequenceNumericOrderingTests(TestCase):
         )
         next_today_number = generate_draft_invoice_number(self.today)
         self.assertEqual(next_today_number, f"{base_today}-001")
+
+
+class BackupRestoreSecurityTests(TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="test_backup_sec_")
+        self.backup_dir = Path(self.temp_dir) / "backups"
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        self.media_dir = Path(self.temp_dir) / "media"
+        self.media_dir.mkdir(parents=True, exist_ok=True)
+        self.user = get_user_model().objects.create_user(
+            username="testuser",
+            password="testpassword",
+            email="testuser@example.com",
+            is_staff=False,
+            is_superuser=False,
+        )
+        self.superuser = get_user_model().objects.create_superuser(
+            username="adminuser",
+            password="adminpassword",
+            email="adminuser@example.com",
+        )
+        self.client = TestClient()
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _create_zip_with_files(self, files_dict, zip_path=None):
+        if zip_path is None:
+            zip_path = Path(self.temp_dir) / "test_archive.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for arcname, content in files_dict.items():
+                if isinstance(content, zipfile.ZipInfo):
+                    zf.writestr(content, b"dummy content")
+                elif isinstance(content, str):
+                    zf.writestr(arcname, content.encode("utf-8"))
+                else:
+                    zf.writestr(arcname, content)
+        return zip_path
+
+    def _valid_backup_files(self):
+        return {
+            DATABASE_ARCNAME: b"SQLite format 3\x00" + b"\x00" * 100,
+            MANIFEST_ARCNAME: json.dumps({"application": "Test", "format_version": 1}),
+            SETTINGS_ARCNAME: json.dumps({"invoice_number_format": "{company3}-{sequence:03d}"}),
+            "media/company_logos/logo.png": b"\x89PNG\r\n\x1a\n",
+        }
+
+    def test_1_path_traversal_relative_rejected(self):
+        files = self._valid_backup_files()
+        files["../../outside.txt"] = b"malicious"
+        zip_path = self._create_zip_with_files(files)
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(zip_path)
+        self.assertIn("unsafe file path", str(ctx.exception))
+
+    def test_2_path_traversal_absolute_rejected(self):
+        files = self._valid_backup_files()
+        files["/Users/test/evil.txt"] = b"malicious"
+        zip_path = self._create_zip_with_files(files)
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(zip_path)
+        self.assertIn("unsafe file path", str(ctx.exception))
+
+    def test_3_path_traversal_windows_rejected(self):
+        files = self._valid_backup_files()
+        files["..\\..\\evil.txt"] = b"malicious"
+        zip_path = self._create_zip_with_files(files)
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(zip_path)
+        self.assertIn("unsafe file path", str(ctx.exception))
+
+    def test_4_symlink_member_rejected(self):
+        zip_path = Path(self.temp_dir) / "symlink_archive.zip"
+        files = self._valid_backup_files()
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            for arcname, content in files.items():
+                zf.writestr(arcname, content)
+            symlink_info = zipfile.ZipInfo("media/symlink_target.png")
+            symlink_info.external_attr = 0o120000 << 16
+            zf.writestr(symlink_info, b"/etc/passwd")
+
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(zip_path)
+        self.assertIn("symbolic links", str(ctx.exception))
+
+    def test_5_executable_file_extensions_rejected(self):
+        exec_extensions = [".exe", ".sh", ".py", ".bat", ".cmd", ".dll", ".js", ".ps1"]
+        for ext in exec_extensions:
+            files = self._valid_backup_files()
+            files[f"media/company_logos/script{ext}"] = b"evil code"
+            zip_path = Path(self.temp_dir) / f"test_exec_{ext.replace('.', '')}.zip"
+            self._create_zip_with_files(files, zip_path)
+            with self.assertRaises(RestoreValidationError) as ctx:
+                validate_backup_zip(zip_path)
+            self.assertIn("executable files", str(ctx.exception))
+
+    def test_6_invalid_zip_archive_rejected(self):
+        corrupt_zip = Path(self.temp_dir) / "corrupt.zip"
+        corrupt_zip.write_bytes(b"NOT A REAL ZIP ARCHIVE DATA")
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(corrupt_zip)
+        self.assertIn("valid backup ZIP file", str(ctx.exception))
+
+    def test_7_invalid_sqlite_database_header_rejected(self):
+        files = self._valid_backup_files()
+        files[DATABASE_ARCNAME] = b"NOT A SQLITE DATABASE HEADER"
+        zip_path = self._create_zip_with_files(files)
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(zip_path)
+        self.assertIn("valid SQLite database", str(ctx.exception))
+
+    def test_8_missing_database_file_rejected(self):
+        files = self._valid_backup_files()
+        del files[DATABASE_ARCNAME]
+        zip_path = self._create_zip_with_files(files)
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(zip_path)
+        self.assertIn("does not contain the SQLite database", str(ctx.exception))
+
+    def test_9_empty_zip_archive_rejected(self):
+        empty_zip = Path(self.temp_dir) / "empty.zip"
+        with zipfile.ZipFile(empty_zip, "w") as zf:
+            pass
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(empty_zip)
+        self.assertIn("does not contain the SQLite database", str(ctx.exception))
+
+    def test_10_valid_backup_accepted(self):
+        files = self._valid_backup_files()
+        zip_path = self._create_zip_with_files(files)
+        result = validate_backup_zip(zip_path)
+        self.assertTrue(result["database"])
+        self.assertTrue(result["manifest"])
+        self.assertEqual(result["media_file_count"], 1)
+
+    def test_11_unsupported_media_extension_rejected(self):
+        files = self._valid_backup_files()
+        files["media/company_logos/evil.php"] = b"<?php echo 'evil'; ?>"
+        zip_path = self._create_zip_with_files(files)
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(zip_path)
+        self.assertIn("unsupported media file type", str(ctx.exception))
+
+    def test_12_unexpected_root_files_rejected(self):
+        files = self._valid_backup_files()
+        files["unexpected_file.txt"] = b"unexpected content"
+        zip_path = self._create_zip_with_files(files)
+        with self.assertRaises(RestoreValidationError) as ctx:
+            validate_backup_zip(zip_path)
+        self.assertIn("unexpected files", str(ctx.exception))
+
+    def test_13_backup_views_superuser_required(self):
+        self.client.login(username="testuser", password="testpassword")
+        response = self.client.get(reverse("backup"))
+        self.assertNotEqual(response.status_code, 200)
+
+        self.client.login(username="adminuser", password="adminpassword")
+        response_admin = self.client.get(reverse("backup"))
+        self.assertEqual(response_admin.status_code, 200)
+
+    @patch("billing.backup._apply_restore")
+    def test_14_restore_creates_pre_restore_safety_backup(self, mock_apply_restore):
+        with override_settings(BACKUP_ROOT=self.backup_dir, MEDIA_ROOT=self.media_dir):
+            files = self._valid_backup_files()
+            zip_path = self._create_zip_with_files(files)
+            result = restore_local_backup(zip_path)
+            self.assertTrue(result.safety_backup_name.startswith("invoice_backup_"))
+            backups = list_local_backups()
+            self.assertTrue(any(b.name == result.safety_backup_name for b in backups))
+            mock_apply_restore.assert_called_once()
