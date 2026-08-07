@@ -39,7 +39,9 @@ from .services import (
     client_fund_status,
     completion_bar_class,
     developer_fund_status,
+    generate_draft_invoice_number,
     generate_invoice_number,
+    invoice_prefix,
     invoice_title,
     invoice_status_badge_class,
     amount_to_currency_words,
@@ -3431,3 +3433,269 @@ class ProjectAssignmentDuplicateValidationTests(TestCase):
             assigned_role="Lead Developer",
         )
         self.assertIsNotNone(assignment_b.pk)
+
+
+class InvoiceNumberSequenceNumericOrderingTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            company_name="Sunsolv Tech",
+            address="12 Tech Park",
+            country="India",
+            state="Karnataka",
+            city="Bengaluru",
+            pin_code="560001",
+        )
+        self.client_a = Client.objects.create(
+            client_name="Alpha Tech",
+            address="100 First St",
+            country="India",
+            state="Karnataka",
+            city="Bengaluru",
+            pin_code="560002",
+        )
+        self.client_b = Client.objects.create(
+            client_name="Beta Systems",
+            address="200 Second St",
+            country="India",
+            state="Karnataka",
+            city="Bengaluru",
+            pin_code="560003",
+        )
+        self.today = date(2026, 8, 7)
+
+    def test_1_normal_low_sequence_increment(self):
+        base = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_a.client_name)}-{self.today.strftime('%d%m%Y')}"
+        Invoice.objects.create(
+            invoice_number=f"{base}-001",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        Invoice.objects.create(
+            invoice_number=f"{base}-002",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_number = generate_invoice_number(self.company, self.client_a, self.today)
+        self.assertEqual(next_number, f"{base}-003")
+
+    def test_2_sequence_999_increments_to_1000(self):
+        base = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_a.client_name)}-{self.today.strftime('%d%m%Y')}"
+        Invoice.objects.create(
+            invoice_number=f"{base}-999",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_number = generate_invoice_number(self.company, self.client_a, self.today)
+        self.assertEqual(next_number, f"{base}-1000")
+
+    def test_3_sequence_1000_increments_to_1001_without_collision(self):
+        base = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_a.client_name)}-{self.today.strftime('%d%m%Y')}"
+        Invoice.objects.create(
+            invoice_number=f"{base}-999",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        Invoice.objects.create(
+            invoice_number=f"{base}-1000",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_number = generate_invoice_number(self.company, self.client_a, self.today)
+        self.assertEqual(next_number, f"{base}-1001")
+
+    def test_4_numeric_ordering_overrides_string_lexicographical_max(self):
+        base = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_a.client_name)}-{self.today.strftime('%d%m%Y')}"
+        Invoice.objects.create(
+            invoice_number=f"{base}-999",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        Invoice.objects.create(
+            invoice_number=f"{base}-1000",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_number = generate_invoice_number(self.company, self.client_a, self.today)
+        self.assertNotEqual(next_number, f"{base}-1000")
+        self.assertEqual(next_number, f"{base}-1001")
+
+    def test_5_different_client_sequence_isolation(self):
+        base_a = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_a.client_name)}-{self.today.strftime('%d%m%Y')}"
+        base_b = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_b.client_name)}-{self.today.strftime('%d%m%Y')}"
+        Invoice.objects.create(
+            invoice_number=f"{base_a}-1000",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_b_number = generate_invoice_number(self.company, self.client_b, self.today)
+        self.assertEqual(next_b_number, f"{base_b}-001")
+
+    def test_6_different_date_sequence_isolation(self):
+        tomorrow = date(2026, 8, 8)
+        base_today = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_a.client_name)}-{self.today.strftime('%d%m%Y')}"
+        base_tomorrow = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_a.client_name)}-{tomorrow.strftime('%d%m%Y')}"
+        Invoice.objects.create(
+            invoice_number=f"{base_today}-1000",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_tomorrow_number = generate_invoice_number(self.company, self.client_a, tomorrow)
+        self.assertEqual(next_tomorrow_number, f"{base_tomorrow}-001")
+
+    def test_7_malformed_suffix_safety(self):
+        base = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_a.client_name)}-{self.today.strftime('%d%m%Y')}"
+        Invoice.objects.create(
+            invoice_number=f"{base}-CUSTOM",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        Invoice.objects.create(
+            invoice_number=f"{base}-005",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_number = generate_invoice_number(self.company, self.client_a, self.today)
+        self.assertEqual(next_number, f"{base}-006")
+
+    def test_8_only_malformed_matching_numbers_defaults_to_001(self):
+        base = f"{invoice_prefix(self.company.company_name)}{invoice_prefix(self.client_a.client_name)}-{self.today.strftime('%d%m%Y')}"
+        Invoice.objects.create(
+            invoice_number=f"{base}-CUSTOM",
+            company=self.company,
+            client=self.client_a,
+            invoice_date=self.today,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_number = generate_invoice_number(self.company, self.client_a, self.today)
+        self.assertEqual(next_number, f"{base}-001")
+
+
+class DraftInvoiceNumberSequenceNumericOrderingTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            company_name="Sunsolv Tech",
+            address="12 Tech Park",
+            country="India",
+            state="Karnataka",
+            city="Bengaluru",
+            pin_code="560001",
+        )
+        self.client = Client.objects.create(
+            client_name="Alpha Tech",
+            address="100 First St",
+            country="India",
+            state="Karnataka",
+            city="Bengaluru",
+            pin_code="560002",
+        )
+        self.today = date(2026, 8, 7)
+
+    def test_draft_1_sequence_999_increments_to_1000(self):
+        base = f"DRAFT-{self.today.strftime('%Y%m%d')}"
+        Invoice.objects.create(
+            invoice_number=f"{base}-999",
+            company=self.company,
+            client=self.client,
+            invoice_date=self.today,
+            invoice_status=Invoice.InvoiceStatus.DRAFT,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_number = generate_draft_invoice_number(self.today)
+        self.assertEqual(next_number, f"{base}-1000")
+
+    def test_draft_2_sequence_1000_increments_to_1001_without_collision(self):
+        base = f"DRAFT-{self.today.strftime('%Y%m%d')}"
+        Invoice.objects.create(
+            invoice_number=f"{base}-999",
+            company=self.company,
+            client=self.client,
+            invoice_date=self.today,
+            invoice_status=Invoice.InvoiceStatus.DRAFT,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        Invoice.objects.create(
+            invoice_number=f"{base}-1000",
+            company=self.company,
+            client=self.client,
+            invoice_date=self.today,
+            invoice_status=Invoice.InvoiceStatus.DRAFT,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_number = generate_draft_invoice_number(self.today)
+        self.assertEqual(next_number, f"{base}-1001")
+
+    def test_draft_3_malformed_draft_suffix_safety(self):
+        base = f"DRAFT-{self.today.strftime('%Y%m%d')}"
+        Invoice.objects.create(
+            invoice_number=f"{base}-CUSTOM",
+            company=self.company,
+            client=self.client,
+            invoice_date=self.today,
+            invoice_status=Invoice.InvoiceStatus.DRAFT,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        Invoice.objects.create(
+            invoice_number=f"{base}-1000",
+            company=self.company,
+            client=self.client,
+            invoice_date=self.today,
+            invoice_status=Invoice.InvoiceStatus.DRAFT,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_number = generate_draft_invoice_number(self.today)
+        self.assertEqual(next_number, f"{base}-1001")
+
+    def test_draft_4_different_date_sequence_isolation(self):
+        yesterday = date(2026, 8, 6)
+        base_yesterday = f"DRAFT-{yesterday.strftime('%Y%m%d')}"
+        base_today = f"DRAFT-{self.today.strftime('%Y%m%d')}"
+        Invoice.objects.create(
+            invoice_number=f"{base_yesterday}-1000",
+            company=self.company,
+            client=self.client,
+            invoice_date=yesterday,
+            invoice_status=Invoice.InvoiceStatus.DRAFT,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+        next_today_number = generate_draft_invoice_number(self.today)
+        self.assertEqual(next_today_number, f"{base_today}-001")
