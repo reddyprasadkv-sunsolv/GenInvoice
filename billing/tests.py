@@ -3947,3 +3947,75 @@ class DesktopLauncherPortFallbackTests(TestCase):
         self.assertEqual(start_app.HOST, "127.0.0.1")
         self.assertNotEqual(start_app.HOST, "0.0.0.0")
 
+
+class ProductionWebSettingsTests(TestCase):
+    def test_1_default_allowed_hosts_and_csrf_defaults(self):
+        from invoice_manager import settings as app_settings
+
+        self.assertIn("127.0.0.1", app_settings.ALLOWED_HOSTS)
+        self.assertIn("localhost", app_settings.ALLOWED_HOSTS)
+
+    def test_2_environment_allowed_hosts_and_csrf_origins(self):
+        with patch.dict(
+            os.environ,
+            {
+                "DJANGO_ALLOWED_HOSTS": "invoice.company.com, 127.0.0.1",
+                "CSRF_TRUSTED_ORIGINS": "https://invoice.company.com",
+            },
+        ):
+            from invoice_manager import settings as app_settings
+
+            _hosts = [
+                h.strip()
+                for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")
+                if h.strip()
+            ]
+            _csrf = [
+                o.strip()
+                for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
+                if o.strip()
+            ]
+            self.assertEqual(_hosts, ["invoice.company.com", "127.0.0.1"])
+            self.assertEqual(_csrf, ["https://invoice.company.com"])
+
+    def test_3_database_url_postgresql_configuration_parsing(self):
+        import urllib.parse
+
+        db_url = "postgres://invoiceuser:securepass@dbhost.internal:5432/invoicedb"
+        parsed = urllib.parse.urlparse(db_url)
+        db_config = {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": parsed.path.lstrip("/"),
+            "USER": parsed.username or "",
+            "PASSWORD": parsed.password or "",
+            "HOST": parsed.hostname or "localhost",
+            "PORT": str(parsed.port or 5432),
+        }
+        self.assertEqual(db_config["ENGINE"], "django.db.backends.postgresql")
+        self.assertEqual(db_config["NAME"], "invoicedb")
+        self.assertEqual(db_config["USER"], "invoiceuser")
+        self.assertEqual(db_config["PASSWORD"], "securepass")
+        self.assertEqual(db_config["HOST"], "dbhost.internal")
+        self.assertEqual(db_config["PORT"], "5432")
+
+    def test_4_production_ssl_security_headers_configuration(self):
+        with patch.dict(
+            os.environ,
+            {
+                "DJANGO_DEBUG": "0",
+                "SECURE_SSL_REDIRECT": "1",
+                "SECURE_COOKIE_SECURITY": "1",
+                "SECURE_PROXY_SSL_HEADER": "1",
+                "SECURE_HSTS_SECONDS": "31536000",
+            },
+        ):
+            debug_flag = os.environ.get("DJANGO_DEBUG") == "1"
+            ssl_redirect = os.environ.get("SECURE_SSL_REDIRECT") == "1"
+            cookie_secure = os.environ.get("SECURE_COOKIE_SECURITY") == "1"
+            hsts_seconds = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
+
+            self.assertFalse(debug_flag)
+            self.assertTrue(ssl_redirect)
+            self.assertTrue(cookie_secure)
+            self.assertEqual(hsts_seconds, 31536000)
+
