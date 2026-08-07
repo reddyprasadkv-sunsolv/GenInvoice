@@ -12,12 +12,38 @@ LOCAL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("XDG_CACHE_HOME", str(LOCAL_CACHE_DIR))
 os.environ.setdefault("FC_CACHEDIR", str(LOCAL_CACHE_DIR / "fontconfig"))
 
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-local-only-phase-1-change-before-shared-use",
-)
+def parse_bool(value, default=False):
+    """Safely parse boolean environment variable values.
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+    Recognizes:
+    - Truthy: "1", "true", "yes", "on" (case-insensitive)
+    - Falsy: "0", "false", "no", "off" (case-insensitive)
+    Returns default if value is None, empty, or unrecognised.
+    """
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    val = str(value).strip().lower()
+    if val in ("1", "true", "yes", "on"):
+        return True
+    if val in ("0", "false", "no", "off"):
+        return False
+    return default
+
+
+DEBUG = parse_bool(os.environ.get("DJANGO_DEBUG"), default=True)
+
+INSECURE_DEV_SECRET = "django-insecure-local-only-phase-1-change-before-shared-use"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = INSECURE_DEV_SECRET
+    else:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY environment variable must be set when DJANGO_DEBUG is False."
+        )
 
 _allowed_hosts_env = os.environ.get("DJANGO_ALLOWED_HOSTS")
 if _allowed_hosts_env:
@@ -25,7 +51,7 @@ if _allowed_hosts_env:
 else:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-_csrf_trusted_env = os.environ.get("CSRF_TRUSTED_ORIGINS")
+_csrf_trusted_env = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS") or os.environ.get("CSRF_TRUSTED_ORIGINS")
 if _csrf_trusted_env:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted_env.split(",") if o.strip()]
 
@@ -147,23 +173,35 @@ LOGOUT_REDIRECT_URL = "login"
 MESSAGE_STORAGE = "django.contrib.messages.storage.cookie.CookieStorage"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+_cookie_secure_env = os.environ.get("SESSION_COOKIE_SECURE") or os.environ.get("SECURE_COOKIE_SECURITY")
+SESSION_COOKIE_SECURE = parse_bool(_cookie_secure_env, default=not DEBUG)
+
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
-X_FRAME_OPTIONS = "DENY"
-SECURE_CONTENT_TYPE_NOSNIFF = True
+_csrf_cookie_secure_env = os.environ.get("CSRF_COOKIE_SECURE") or os.environ.get("SECURE_COOKIE_SECURITY")
+CSRF_COOKIE_SECURE = parse_bool(_csrf_cookie_secure_env, default=not DEBUG)
 
-if not DEBUG:
-    if os.environ.get("SECURE_SSL_REDIRECT", "0") == "1":
-        SECURE_SSL_REDIRECT = True
-    if os.environ.get("SECURE_COOKIE_SECURITY", "0") == "1":
-        SESSION_COOKIE_SECURE = True
-        CSRF_COOKIE_SECURE = True
-    if os.environ.get("SECURE_PROXY_SSL_HEADER", "0") == "1":
-        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    if os.environ.get("SECURE_HSTS_SECONDS"):
-        try:
-            SECURE_HSTS_SECONDS = int(os.environ["SECURE_HSTS_SECONDS"])
-            SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-            SECURE_HSTS_PRELOAD = True
-        except ValueError:
-            pass
+X_FRAME_OPTIONS = "DENY"
+SECURE_CONTENT_TYPE_NOSNIFF = parse_bool(os.environ.get("SECURE_CONTENT_TYPE_NOSNIFF"), default=True)
+SECURE_SSL_REDIRECT = parse_bool(os.environ.get("SECURE_SSL_REDIRECT"), default=not DEBUG)
+SECURE_REFERRER_POLICY = os.environ.get("SECURE_REFERRER_POLICY", "same-origin")
+
+if parse_bool(os.environ.get("SECURE_PROXY_SSL_HEADER"), default=False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+else:
+    SECURE_PROXY_SSL_HEADER = None
+
+try:
+    _hsts_seconds_raw = os.environ.get("DJANGO_SECURE_HSTS_SECONDS") or os.environ.get("SECURE_HSTS_SECONDS", "0")
+    SECURE_HSTS_SECONDS = int(_hsts_seconds_raw)
+except ValueError:
+    SECURE_HSTS_SECONDS = 0
+
+SECURE_HSTS_INCLUDE_SUBDOMAINS = parse_bool(
+    os.environ.get("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS") or os.environ.get("SECURE_HSTS_INCLUDE_SUBDOMAINS"),
+    default=False,
+)
+SECURE_HSTS_PRELOAD = parse_bool(
+    os.environ.get("DJANGO_SECURE_HSTS_PRELOAD") or os.environ.get("SECURE_HSTS_PRELOAD"),
+    default=False,
+)

@@ -4019,3 +4019,135 @@ class ProductionWebSettingsTests(TestCase):
             self.assertTrue(cookie_secure)
             self.assertEqual(hsts_seconds, 31536000)
 
+
+class ProductionSettingsHardeningTests(TestCase):
+    def _run_settings_script(self, env_vars, code_snippet):
+        import subprocess
+        import sys
+
+        env = os.environ.copy()
+        for key in [
+            "DJANGO_DEBUG",
+            "DJANGO_SECRET_KEY",
+            "DJANGO_ALLOWED_HOSTS",
+            "DJANGO_CSRF_TRUSTED_ORIGINS",
+            "CSRF_TRUSTED_ORIGINS",
+            "SESSION_COOKIE_SECURE",
+            "CSRF_COOKIE_SECURE",
+            "SECURE_COOKIE_SECURITY",
+            "SECURE_SSL_REDIRECT",
+            "SECURE_PROXY_SSL_HEADER",
+            "DJANGO_SECURE_HSTS_SECONDS",
+            "SECURE_HSTS_SECONDS",
+            "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
+            "SECURE_HSTS_INCLUDE_SUBDOMAINS",
+            "DJANGO_SECURE_HSTS_PRELOAD",
+            "SECURE_HSTS_PRELOAD",
+        ]:
+            env.pop(key, None)
+        env.update(env_vars)
+
+        cmd = [
+            sys.executable,
+            "-c",
+            f"import os, sys; from invoice_manager import settings; {code_snippet}",
+        ]
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_1_local_defaults(self):
+        res = self._run_settings_script(
+            {},
+            "assert settings.DEBUG is True\nassert '127.0.0.1' in settings.ALLOWED_HOSTS\nassert 'localhost' in settings.ALLOWED_HOSTS\nassert settings.SESSION_COOKIE_SECURE is False\nassert settings.CSRF_COOKIE_SECURE is False\nassert settings.SECURE_SSL_REDIRECT is False\nprint('LOCAL_DEFAULTS')",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("LOCAL_DEFAULTS", res.stdout)
+
+    def test_2_debug_parsing(self):
+        from invoice_manager.settings import parse_bool
+        self.assertTrue(parse_bool("1"))
+        self.assertTrue(parse_bool("true"))
+        self.assertTrue(parse_bool("TRUE"))
+        self.assertTrue(parse_bool("yes"))
+        self.assertTrue(parse_bool("on"))
+
+        self.assertFalse(parse_bool("0"))
+        self.assertFalse(parse_bool("false"))
+        self.assertFalse(parse_bool("FALSE"))
+        self.assertFalse(parse_bool("no"))
+        self.assertFalse(parse_bool("off"))
+
+        self.assertTrue(parse_bool(None, default=True))
+        self.assertFalse(parse_bool(None, default=False))
+
+        res_false = self._run_settings_script(
+            {"DJANGO_DEBUG": "0", "DJANGO_SECRET_KEY": "dummy-key-for-test"},
+            "assert settings.DEBUG is False",
+        )
+        self.assertEqual(res_false.returncode, 0, res_false.stderr)
+
+        res_true = self._run_settings_script(
+            {"DJANGO_DEBUG": "1"},
+            "assert settings.DEBUG is True",
+        )
+        self.assertEqual(res_true.returncode, 0, res_true.stderr)
+
+    def test_3_hosts_parsing(self):
+        res = self._run_settings_script(
+            {"DJANGO_ALLOWED_HOSTS": " invoice.example.com , www.invoice.example.com "},
+            "print(settings.ALLOWED_HOSTS)",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("['invoice.example.com', 'www.invoice.example.com']", res.stdout)
+
+    def test_4_csrf_origin_parsing(self):
+        res = self._run_settings_script(
+            {"DJANGO_CSRF_TRUSTED_ORIGINS": "https://invoice.example.com, https://www.invoice.example.com"},
+            "print(settings.CSRF_TRUSTED_ORIGINS)",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("['https://invoice.example.com', 'https://www.invoice.example.com']", res.stdout)
+
+    def test_5_missing_production_secret_fails_fast(self):
+        res = self._run_settings_script(
+            {"DJANGO_DEBUG": "0"},
+            "print(settings.SECRET_KEY)",
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("ImproperlyConfigured", res.stderr)
+        self.assertIn("DJANGO_SECRET_KEY environment variable must be set", res.stderr)
+
+    def test_6_secure_production_cookies(self):
+        res = self._run_settings_script(
+            {"DJANGO_DEBUG": "0", "DJANGO_SECRET_KEY": "valid-production-test-key"},
+            "assert settings.SESSION_COOKIE_SECURE is True\nassert settings.CSRF_COOKIE_SECURE is True\nassert settings.SECURE_SSL_REDIRECT is True\nprint('COOKIES_SECURE')",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("COOKIES_SECURE", res.stdout)
+
+    def test_7_hsts_conservative_defaults(self):
+        res = self._run_settings_script(
+            {"DJANGO_DEBUG": "0", "DJANGO_SECRET_KEY": "valid-production-test-key"},
+            "assert settings.SECURE_HSTS_SECONDS == 0\nassert settings.SECURE_HSTS_INCLUDE_SUBDOMAINS is False\nassert settings.SECURE_HSTS_PRELOAD is False\nprint('HSTS_DEFAULTS')",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("HSTS_DEFAULTS", res.stdout)
+
+    def test_8_hsts_explicit_opt_in(self):
+        res = self._run_settings_script(
+            {
+                "DJANGO_DEBUG": "0",
+                "DJANGO_SECRET_KEY": "valid-production-test-key",
+                "DJANGO_SECURE_HSTS_SECONDS": "31536000",
+                "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS": "1",
+                "DJANGO_SECURE_HSTS_PRELOAD": "1",
+            },
+            "assert settings.SECURE_HSTS_SECONDS == 31536000\nassert settings.SECURE_HSTS_INCLUDE_SUBDOMAINS is True\nassert settings.SECURE_HSTS_PRELOAD is True\nprint('HSTS_OPT_IN')",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("HSTS_OPT_IN", res.stdout)
+
