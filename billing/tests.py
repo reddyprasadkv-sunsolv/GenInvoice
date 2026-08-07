@@ -43,6 +43,7 @@ from .services import (
     invoice_title,
     invoice_status_badge_class,
     amount_to_currency_words,
+    to_money,
     project_financial_summary,
     project_status_badge_class,
     recalculate_project_client_payments,
@@ -2856,3 +2857,156 @@ class PhaseEightTests(TestCase):
         Invoice.objects.all().delete()
         response = self.client.get(reverse("invoice_list"))
         self.assertContains(response, "No invoices found. Create your first invoice to get started.")
+
+
+class DashboardCurrencySeparationTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.settings_override.enable()
+        self.user = get_user_model().objects.create_user(
+            username="dashboard_qa_owner",
+            password="secure-test-password-123",
+        )
+        self.client.login(username="dashboard_qa_owner", password="secure-test-password-123")
+        self.company = Company.objects.create(
+            company_name="Sunsolv Tech",
+            address="12 Tech Park",
+            country="India",
+            state="Karnataka",
+            city="Bengaluru",
+            pin_code="560001",
+            gstin="29ABCDE1234F1Z5",
+        )
+        self.inr_client = Client.objects.create(
+            client_name="INR Client Ltd",
+            address="Mumbai",
+            country="India",
+            state="Maharashtra",
+            city="Mumbai",
+            pin_code="400001",
+        )
+        self.usd_client = Client.objects.create(
+            client_name="USD Client Inc",
+            address="New York",
+            country="USA",
+            state="NY",
+            city="New York",
+            pin_code="10001",
+        )
+
+    def tearDown(self):
+        self.settings_override.disable()
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    def create_invoice(self, invoice_number, total_amount, client=None, invoice_date=date(2026, 6, 25), currency="INR"):
+        target_client = client or self.inr_client
+        subtotal = to_money(total_amount / Decimal("1.18")) if currency == "INR" else total_amount
+        gst_amt = to_money(total_amount - subtotal) if currency == "INR" else Decimal("0.00")
+        invoice = Invoice.objects.create(
+            invoice_number=invoice_number,
+            company=self.company,
+            client=target_client,
+            invoice_date=invoice_date,
+            subject="Currency Separation QA",
+            currency=currency,
+            subtotal=subtotal,
+            gst_percentage=Decimal("18.00") if currency == "INR" else Decimal("0.00"),
+            gst_amount=gst_amt,
+            total_amount=total_amount,
+            amount_in_words=amount_to_indian_words(total_amount) if currency == "INR" else f"${total_amount} USD",
+            pending_amount=total_amount,
+        )
+        InvoiceItem.objects.create(
+            invoice=invoice,
+            serial_number=1,
+            description="Consulting Service",
+            item_price=subtotal,
+            quantity=Decimal("1.00"),
+            total=subtotal,
+        )
+        return invoice
+
+    def add_payment(self, invoice, amount):
+        return self.client.post(
+            reverse("invoice_add_payment", kwargs={"pk": invoice.pk}),
+            {
+                "received_amount": str(amount),
+                "payment_date": "2026-06-25",
+                "payment_mode": "UPI",
+                "remarks": "QA payment",
+            },
+            follow=True,
+        )
+
+    def test_1_inr_only_records_reflect_inr_totals_and_zero_usd_totals(self):
+        inr_inv = self.create_invoice("INR-INV-001", Decimal("100000.00"), client=self.inr_client, currency="INR")
+        self.add_payment(inr_inv, Decimal("40000.00"))
+        response = self.client.get(reverse("dashboard"), {"period": "custom", "start_date": "2026-06-01", "end_date": "2026-06-30"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["invoice_currency_summaries"]["INR"]["raised"], Decimal("100000.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["INR"]["received"], Decimal("40000.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["INR"]["pending"], Decimal("60000.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["USD"]["raised"], Decimal("0.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["USD"]["received"], Decimal("0.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["USD"]["pending"], Decimal("0.00"))
+
+    def test_2_usd_only_records_reflect_usd_totals_and_zero_inr_totals(self):
+        usd_inv = self.create_invoice("USD-INV-001", Decimal("2000.00"), client=self.usd_client, currency="USD")
+        self.add_payment(usd_inv, Decimal("500.00"))
+        response = self.client.get(reverse("dashboard"), {"period": "custom", "start_date": "2026-06-01", "end_date": "2026-06-30"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["invoice_currency_summaries"]["USD"]["raised"], Decimal("2000.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["USD"]["received"], Decimal("500.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["USD"]["pending"], Decimal("1500.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["INR"]["raised"], Decimal("0.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["INR"]["received"], Decimal("0.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["INR"]["pending"], Decimal("0.00"))
+
+    def test_3_mixed_inr_and_usd_records_maintain_strict_currency_separation(self):
+        self.create_invoice("INR-INV-100", Decimal("100000.00"), client=self.inr_client, currency="INR")
+        self.create_invoice("USD-INV-200", Decimal("2000.00"), client=self.usd_client, currency="USD")
+        response = self.client.get(reverse("dashboard"), {"period": "custom", "start_date": "2026-06-01", "end_date": "2026-06-30"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["invoice_currency_summaries"]["INR"]["raised"], Decimal("100000.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["USD"]["raised"], Decimal("2000.00"))
+        cards = {card["label"]: card["value"] for card in response.context["summary_cards"]}
+        self.assertEqual(cards["Raised invoice amount / Total Invoice Value - INR"], "₹1,00,000")
+        self.assertEqual(cards["Raised invoice amount / Total Invoice Value - USD"], "$2,000")
+        self.assertNotIn("102000", response.content.decode("utf-8"))
+        self.assertNotIn("102,000", response.content.decode("utf-8"))
+
+    def test_4_received_amounts_segregated_by_currency(self):
+        inr_inv = self.create_invoice("INR-INV-REC", Decimal("50000.00"), client=self.inr_client, currency="INR")
+        usd_inv = self.create_invoice("USD-INV-REC", Decimal("3000.00"), client=self.usd_client, currency="USD")
+        self.add_payment(inr_inv, Decimal("20000.00"))
+        self.add_payment(usd_inv, Decimal("1000.00"))
+        response = self.client.get(reverse("dashboard"), {"period": "custom", "start_date": "2026-06-01", "end_date": "2026-06-30"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["invoice_currency_summaries"]["INR"]["received"], Decimal("20000.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["USD"]["received"], Decimal("1000.00"))
+
+    def test_5_pending_amounts_segregated_by_currency(self):
+        inr_inv = self.create_invoice("INR-INV-PEN", Decimal("50000.00"), client=self.inr_client, currency="INR")
+        usd_inv = self.create_invoice("USD-INV-PEN", Decimal("3000.00"), client=self.usd_client, currency="USD")
+        self.add_payment(inr_inv, Decimal("10000.00"))
+        self.add_payment(usd_inv, Decimal("500.00"))
+        response = self.client.get(reverse("dashboard"), {"period": "custom", "start_date": "2026-06-01", "end_date": "2026-06-30"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["invoice_currency_summaries"]["INR"]["pending"], Decimal("40000.00"))
+        self.assertEqual(response.context["invoice_currency_summaries"]["USD"]["pending"], Decimal("2500.00"))
+
+    def test_6_current_month_mixed_currency_segregation(self):
+        today = date.today()
+        inr_inv = self.create_invoice("INR-CUR-MON", Decimal("80000.00"), client=self.inr_client, invoice_date=today, currency="INR")
+        usd_inv = self.create_invoice("USD-CUR-MON", Decimal("4000.00"), client=self.usd_client, invoice_date=today, currency="USD")
+        self.add_payment(inr_inv, Decimal("30000.00"))
+        self.add_payment(usd_inv, Decimal("1500.00"))
+        response = self.client.get(reverse("dashboard"), {"period": "this_month"})
+        self.assertEqual(response.status_code, 200)
+        inr_summary = response.context["invoice_currency_summaries"]["INR"]
+        usd_summary = response.context["invoice_currency_summaries"]["USD"]
+        self.assertGreaterEqual(inr_summary["raised"], Decimal("80000.00"))
+        self.assertGreaterEqual(inr_summary["received"], Decimal("30000.00"))
+        self.assertGreaterEqual(usd_summary["raised"], Decimal("4000.00"))
+        self.assertGreaterEqual(usd_summary["received"], Decimal("1500.00"))
