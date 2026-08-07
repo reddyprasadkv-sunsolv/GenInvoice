@@ -3010,3 +3010,229 @@ class DashboardCurrencySeparationTests(TestCase):
         self.assertGreaterEqual(inr_summary["received"], Decimal("30000.00"))
         self.assertGreaterEqual(usd_summary["raised"], Decimal("4000.00"))
         self.assertGreaterEqual(usd_summary["received"], Decimal("1500.00"))
+
+
+class InvoiceLineItemDeletionAndFormsetTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.settings_override.enable()
+        self.user = get_user_model().objects.create_user(
+            username="lineitem_owner",
+            password="secure-test-password-123",
+        )
+        self.client.login(username="lineitem_owner", password="secure-test-password-123")
+        self.gst_company = Company.objects.create(
+            company_name="Sunsolv Tech",
+            address="12 Tech Park",
+            country="India",
+            state="Karnataka",
+            city="Bengaluru",
+            pin_code="560001",
+            gstin="29ABCDE1234F1Z5",
+        )
+        self.client_with_gstin = Client.objects.create(
+            client_name="MSU Enterprises",
+            address="45 Commerce Road",
+            country="India",
+            state="Maharashtra",
+            city="Mumbai",
+            pin_code="400001",
+            gstin="27ABCDE1234F1Z5",
+        )
+        self.hsn1 = HsnSacCode.objects.create(code="998313", description="IT Design Services")
+        self.hsn2 = HsnSacCode.objects.create(code="998314", description="IT Consulting Services")
+
+    def tearDown(self):
+        self.settings_override.disable()
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    def invoice_post_data(self, company, client, item_price="10000.00", quantity="1.00"):
+        return {
+            "company": company.pk,
+            "client": client.pk,
+            "invoice_date": "2026-06-25",
+            "subject": "Website development services",
+            "terms_and_conditions": "Payment should be made within the agreed timeline.",
+            "declaration": "Invoice details are true and correct.",
+            "items-TOTAL_FORMS": "1",
+            "items-INITIAL_FORMS": "0",
+            "items-MIN_NUM_FORMS": "0",
+            "items-MAX_NUM_FORMS": "1000",
+            "items-0-description": "Development work",
+            "items-0-item_price": item_price,
+            "items-0-quantity": quantity,
+        }
+
+    def test_1_create_invoice_with_multiple_line_items_saves_all_items(self):
+        data = self.invoice_post_data(self.gst_company, self.client_with_gstin)
+        data.update({
+            "items-TOTAL_FORMS": "3",
+            "items-INITIAL_FORMS": "0",
+            "items-0-description": "Item 1 Software",
+            "items-0-hsn_sac_code": str(self.hsn1.pk),
+            "items-0-item_price": "1000.00",
+            "items-0-quantity": "2.00",
+            "items-1-description": "Item 2 Support",
+            "items-1-hsn_sac_code": str(self.hsn2.pk),
+            "items-1-item_price": "2000.00",
+            "items-1-quantity": "1.00",
+            "items-2-description": "Item 3 Maintenance",
+            "items-2-hsn_sac_code": "",
+            "items-2-item_price": "500.00",
+            "items-2-quantity": "4.00",
+        })
+        response = self.client.post(reverse("invoice_add"), data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        invoice = Invoice.objects.get(subject="Website development services")
+        self.assertEqual(invoice.items.count(), 3)
+        self.assertEqual(invoice.subtotal, Decimal("6000.00"))
+        self.assertEqual(invoice.gst_amount, Decimal("1080.00"))
+        self.assertEqual(invoice.total_amount, Decimal("7080.00"))
+
+    def test_2_delete_middle_extra_row_simulated_reindexing(self):
+        data = self.invoice_post_data(self.gst_company, self.client_with_gstin)
+        data.update({
+            "items-TOTAL_FORMS": "2",
+            "items-INITIAL_FORMS": "0",
+            "items-0-description": "Item 1 First",
+            "items-0-hsn_sac_code": str(self.hsn1.pk),
+            "items-0-item_price": "1000.00",
+            "items-0-quantity": "1.00",
+            "items-1-description": "Item 3 Third Reindexed",
+            "items-1-hsn_sac_code": str(self.hsn2.pk),
+            "items-1-item_price": "3000.00",
+            "items-1-quantity": "1.00",
+        })
+        response = self.client.post(reverse("invoice_add"), data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        invoice = Invoice.objects.get(subject="Website development services")
+        self.assertEqual(invoice.items.count(), 2)
+        descriptions = list(invoice.items.values_list("description", flat=True))
+        self.assertEqual(descriptions, ["Item 1 First", "Item 3 Third Reindexed"])
+        self.assertEqual(invoice.subtotal, Decimal("4000.00"))
+
+    def test_3_edit_invoice_delete_existing_item_recalculates_subtotal_and_gst(self):
+        data = self.invoice_post_data(self.gst_company, self.client_with_gstin)
+        data.update({
+            "items-TOTAL_FORMS": "3",
+            "items-INITIAL_FORMS": "0",
+            "items-0-description": "Item Alpha",
+            "items-0-item_price": "5000.00",
+            "items-0-quantity": "1.00",
+            "items-1-description": "Item Beta",
+            "items-1-item_price": "2000.00",
+            "items-1-quantity": "1.00",
+            "items-2-description": "Item Gamma",
+            "items-2-item_price": "3000.00",
+            "items-2-quantity": "1.00",
+        })
+        self.client.post(reverse("invoice_add"), data, follow=True)
+        invoice = Invoice.objects.get(subject="Website development services")
+        self.assertEqual(invoice.items.count(), 3)
+        self.assertEqual(invoice.subtotal, Decimal("10000.00"))
+
+        edit_data = self.invoice_post_data(self.gst_company, self.client_with_gstin)
+        edit_data.update({
+            "subject": "Invoice After Item Beta Deleted",
+            "items-TOTAL_FORMS": "3",
+            "items-INITIAL_FORMS": "3",
+            "items-0-description": "Item Alpha",
+            "items-0-item_price": "5000.00",
+            "items-0-quantity": "1.00",
+            "items-1-description": "Item Beta",
+            "items-1-item_price": "2000.00",
+            "items-1-quantity": "1.00",
+            "items-1-DELETE": "on",
+            "items-2-description": "Item Gamma",
+            "items-2-item_price": "3000.00",
+            "items-2-quantity": "1.00",
+        })
+        response = self.client.post(reverse("invoice_edit", kwargs={"pk": invoice.pk}), edit_data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.items.count(), 2)
+        remaining_descriptions = list(invoice.items.values_list("description", flat=True))
+        self.assertIn("Item Alpha", remaining_descriptions)
+        self.assertIn("Item Gamma", remaining_descriptions)
+        self.assertNotIn("Item Beta", remaining_descriptions)
+        self.assertEqual(invoice.subtotal, Decimal("8000.00"))
+        self.assertEqual(invoice.gst_amount, Decimal("1440.00"))
+
+    def test_4_edit_invoice_delete_existing_item_and_add_new_extra_item(self):
+        data = self.invoice_post_data(self.gst_company, self.client_with_gstin)
+        data.update({
+            "items-TOTAL_FORMS": "2",
+            "items-INITIAL_FORMS": "0",
+            "items-0-description": "Original Row 1",
+            "items-0-item_price": "1000.00",
+            "items-0-quantity": "1.00",
+            "items-1-description": "Original Row 2",
+            "items-1-item_price": "2000.00",
+            "items-1-quantity": "1.00",
+        })
+        self.client.post(reverse("invoice_add"), data, follow=True)
+        invoice = Invoice.objects.get(subject="Website development services")
+        self.assertEqual(invoice.items.count(), 2)
+
+        edit_data = self.invoice_post_data(self.gst_company, self.client_with_gstin)
+        edit_data.update({
+            "items-TOTAL_FORMS": "3",
+            "items-INITIAL_FORMS": "2",
+            "items-0-description": "Original Row 1",
+            "items-0-item_price": "1000.00",
+            "items-0-quantity": "1.00",
+            "items-0-DELETE": "on",
+            "items-1-description": "Original Row 2",
+            "items-1-item_price": "2000.00",
+            "items-1-quantity": "1.00",
+            "items-2-description": "Newly Added Extra Row 3",
+            "items-2-item_price": "4000.00",
+            "items-2-quantity": "1.00",
+        })
+        response = self.client.post(reverse("invoice_edit", kwargs={"pk": invoice.pk}), edit_data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.items.count(), 2)
+        descriptions = list(invoice.items.values_list("description", flat=True))
+        self.assertEqual(descriptions, ["Original Row 2", "Newly Added Extra Row 3"])
+        self.assertEqual(invoice.subtotal, Decimal("6000.00"))
+
+    def test_5_hsn_sac_code_preservation_after_item_deletion(self):
+        data = self.invoice_post_data(self.gst_company, self.client_with_gstin)
+        data.update({
+            "items-TOTAL_FORMS": "2",
+            "items-INITIAL_FORMS": "0",
+            "items-0-description": "Design Phase",
+            "items-0-hsn_sac_code": str(self.hsn1.pk),
+            "items-0-item_price": "5000.00",
+            "items-0-quantity": "1.00",
+            "items-1-description": "Consulting Phase",
+            "items-1-hsn_sac_code": str(self.hsn2.pk),
+            "items-1-item_price": "3000.00",
+            "items-1-quantity": "1.00",
+        })
+        self.client.post(reverse("invoice_add"), data, follow=True)
+        invoice = Invoice.objects.get(subject="Website development services")
+
+        edit_data = self.invoice_post_data(self.gst_company, self.client_with_gstin)
+        edit_data.update({
+            "items-TOTAL_FORMS": "2",
+            "items-INITIAL_FORMS": "2",
+            "items-0-description": "Design Phase",
+            "items-0-hsn_sac_code": str(self.hsn1.pk),
+            "items-0-item_price": "5000.00",
+            "items-0-quantity": "1.00",
+            "items-0-DELETE": "on",
+            "items-1-description": "Consulting Phase",
+            "items-1-hsn_sac_code": str(self.hsn2.pk),
+            "items-1-item_price": "3000.00",
+            "items-1-quantity": "1.00",
+        })
+        response = self.client.post(reverse("invoice_edit", kwargs={"pk": invoice.pk}), edit_data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.items.count(), 1)
+        remaining_item = invoice.items.get()
+        self.assertEqual(remaining_item.description, "Consulting Phase")
+        self.assertEqual(remaining_item.hsn_sac_code.code, "998314")
