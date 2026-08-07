@@ -487,6 +487,12 @@ class ProjectAssignment(models.Model):
 
     class Meta:
         ordering = ["project", "developer_vendor"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "developer_vendor"],
+                name="unique_project_developer_assignment",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.project.project_name} - {self.developer_vendor.name}"
