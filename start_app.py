@@ -47,6 +47,10 @@ def prepare_environment():
     sys.path.insert(0, str(root))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "invoice_manager.settings")
     os.environ.setdefault("DJANGO_DEBUG", "0")
+    os.environ.setdefault("DJANGO_SECRET_KEY", "django-insecure-desktop-local-app-key-change-in-production")
+    os.environ.setdefault("SECURE_SSL_REDIRECT", "0")
+    os.environ.setdefault("SESSION_COOKIE_SECURE", "0")
+    os.environ.setdefault("CSRF_COOKIE_SECURE", "0")
     os.environ["INVOICEAPP_DATA_DIR"] = str(data_dir)
     os.environ["INVOICEAPP_SERVE_LOCAL_FILES"] = "1"
     return data_dir
