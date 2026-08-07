@@ -19,7 +19,15 @@ SECRET_KEY = os.environ.get(
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+_allowed_hosts_env = os.environ.get("DJANGO_ALLOWED_HOSTS")
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()]
+else:
+    ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+_csrf_trusted_env = os.environ.get("CSRF_TRUSTED_ORIGINS")
+if _csrf_trusted_env:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted_env.split(",") if o.strip()]
 
 
 INSTALLED_APPS = [
@@ -64,12 +72,37 @@ TEMPLATES = [
 WSGI_APPLICATION = "invoice_manager.wsgi.application"
 
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": Path(os.environ.get("INVOICEAPP_DB_PATH", DATA_DIR / "db.sqlite3")).expanduser(),
+if os.environ.get("DATABASE_URL"):
+    import urllib.parse
+    _db_url = urllib.parse.urlparse(os.environ["DATABASE_URL"])
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": _db_url.path.lstrip("/"),
+            "USER": _db_url.username or "",
+            "PASSWORD": _db_url.password or "",
+            "HOST": _db_url.hostname or "localhost",
+            "PORT": str(_db_url.port or 5432),
+        }
     }
-}
+elif os.environ.get("DJANGO_DB_ENGINE") == "postgresql":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DJANGO_DB_NAME", "invoiceapp"),
+            "USER": os.environ.get("DJANGO_DB_USER", "postgres"),
+            "PASSWORD": os.environ.get("DJANGO_DB_PASSWORD", ""),
+            "HOST": os.environ.get("DJANGO_DB_HOST", "localhost"),
+            "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
+        }
+    }
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": Path(os.environ.get("INVOICEAPP_DB_PATH", DATA_DIR / "db.sqlite3")).expanduser(),
+        }
+    }
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -118,3 +151,19 @@ CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
+
+if not DEBUG:
+    if os.environ.get("SECURE_SSL_REDIRECT", "0") == "1":
+        SECURE_SSL_REDIRECT = True
+    if os.environ.get("SECURE_COOKIE_SECURITY", "0") == "1":
+        SESSION_COOKIE_SECURE = True
+        CSRF_COOKIE_SECURE = True
+    if os.environ.get("SECURE_PROXY_SSL_HEADER", "0") == "1":
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    if os.environ.get("SECURE_HSTS_SECONDS"):
+        try:
+            SECURE_HSTS_SECONDS = int(os.environ["SECURE_HSTS_SECONDS"])
+            SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+            SECURE_HSTS_PRELOAD = True
+        except ValueError:
+            pass
