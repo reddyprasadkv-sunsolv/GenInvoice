@@ -4274,3 +4274,92 @@ class PostgreSQLSettingsTests(TestCase):
         self.assertIn("Invalid or malformed DATABASE_URL specified", res.stderr)
 
 
+class FreeTierStagingHardeningTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="admin_staging",
+            email="admin@example.com",
+            password="adminpassword123",
+        )
+        self.client.login(username="admin_staging", password="adminpassword123")
+        self.company = Company.objects.create(
+            company_name="Staging Test Company",
+            address="123 Test St",
+            country="India",
+            state="Telangana",
+            city="Hyderabad",
+            pin_code="500081",
+        )
+        self.invoice_client = Client.objects.create(
+            client_name="Staging Client",
+            address="456 Client St",
+            country="India",
+            state="Telangana",
+            city="Hyderabad",
+            pin_code="500081",
+        )
+        self.invoice = Invoice.objects.create(
+            company=self.company,
+            client=self.invoice_client,
+            invoice_number="INV-2026-0001",
+            invoice_date=date.today(),
+            invoice_status=Invoice.InvoiceStatus.FINAL,
+            subtotal=Decimal("1000.00"),
+            total_amount=Decimal("1000.00"),
+        )
+
+    def test_1_local_environment_banner_and_media_warning_absent(self):
+        with override_settings(DJANGO_ENVIRONMENT="local"):
+            response = self.client.get(reverse("dashboard"))
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, "TEST ENVIRONMENT — Do not enter permanent client, invoice or payment data.")
+
+            form_resp = self.client.get(reverse("company_add"))
+            self.assertEqual(form_resp.status_code, 200)
+            self.assertNotContains(form_resp, "Test environment: uploaded files may be removed during redeployment.")
+
+    def test_2_staging_environment_banner_and_media_warning_present(self):
+        with override_settings(DJANGO_ENVIRONMENT="staging"):
+            response = self.client.get(reverse("dashboard"))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "TEST ENVIRONMENT — Do not enter permanent client, invoice or payment data.")
+
+            form_resp = self.client.get(reverse("company_add"))
+            self.assertEqual(form_resp.status_code, 200)
+            self.assertContains(form_resp, "Test environment: uploaded files may be removed during redeployment.")
+
+    def test_3_postgresql_backend_disables_sqlite_backup_ui_and_routes(self):
+        with patch("django.db.connection.vendor", "postgresql"):
+            resp = self.client.get(reverse("backup"))
+            self.assertEqual(resp.status_code, 200)
+            self.assertContains(resp, "PostgreSQL Database Active")
+            self.assertContains(resp, "Database backup/restore from this screen is unavailable when PostgreSQL is in use.")
+
+            # Direct POST to backup_create blocked
+            post_resp = self.client.post(reverse("backup_create"), follow=True)
+            self.assertContains(post_resp, "Database backup/restore from this screen is unavailable when PostgreSQL is in use.")
+
+            # Direct GET to backup_download blocked
+            dl_resp = self.client.get(reverse("backup_download", kwargs={"filename": "fake_backup.zip"}), follow=True)
+            self.assertContains(dl_resp, "Database backup/restore from this screen is unavailable when PostgreSQL is in use.")
+
+            # Direct POST to restore_upload blocked
+            up_resp = self.client.post(reverse("restore_upload"), follow=True)
+            self.assertContains(up_resp, "Database backup/restore from this screen is unavailable when PostgreSQL is in use.")
+
+    def test_4_sqlite_backend_preserves_backup_behavior(self):
+        with patch("django.db.connection.vendor", "sqlite"):
+            resp = self.client.get(reverse("backup"))
+            self.assertEqual(resp.status_code, 200)
+            self.assertNotContains(resp, "PostgreSQL Database Active")
+            self.assertContains(resp, "Create Backup")
+            self.assertContains(resp, "Restore Backup")
+
+    def test_5_anonymous_user_cannot_download_invoice_pdf(self):
+        from django.test import Client as DjangoTestClient
+        anon_client = DjangoTestClient()
+        url = reverse("invoice_pdf_download", kwargs={"pk": self.invoice.pk})
+        response = anon_client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response.url)
+

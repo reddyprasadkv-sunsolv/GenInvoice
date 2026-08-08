@@ -64,6 +64,13 @@
                 {% csrf_token %}
             </form>
 
+            {% if DJANGO_ENVIRONMENT == 'staging' %}
+                <div class="alert alert-warning mb-3 font-weight-bold shadow-sm d-flex align-items-center" role="alert" style="background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 6px; padding: 10px 16px; margin: 16px 24px 0 24px;">
+                    <span style="font-size: 1.1em; margin-right: 8px;">⚠️</span>
+                    <span>TEST ENVIRONMENT — Do not enter permanent client, invoice or payment data.</span>
+                </div>
+            {% endif %}
+
             {% if messages %}
                 <div class="message-stack">
                     {% for message in messages %}
@@ -77,6 +84,11 @@
     </div>
 {% else %}
     <main class="auth-shell">
+        {% if DJANGO_ENVIRONMENT == 'staging' %}
+            <div class="alert alert-warning text-center font-weight-bold" role="alert" style="background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 6px; padding: 10px 16px; margin-bottom: 20px; text-align: center;">
+                ⚠️ TEST ENVIRONMENT — Do not enter permanent client, invoice or payment data.
+            </div>
+        {% endif %}
         {% block auth_content %}{% endblock %}
     </main>
 {% endif %}

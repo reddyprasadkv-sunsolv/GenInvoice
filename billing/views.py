@@ -10,7 +10,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth import views as auth_views
 from django.core.exceptions import PermissionDenied
-from django.db import IntegrityError, OperationalError, ProgrammingError, transaction
+from django.db import connection, IntegrityError, OperationalError, ProgrammingError, transaction
 from django.http import FileResponse
 from django.db.models import Count, DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
@@ -1628,14 +1628,25 @@ def settings_view(request):
     )
 
 
+POSTGRESQL_BACKUP_DISABLED_MSG = (
+    "Database backup/restore from this screen is unavailable when PostgreSQL is in use. "
+    "Use the configured PostgreSQL backup process instead."
+)
+
+
 @superuser_required
 def backup_dashboard(request):
+    if connection.vendor == "postgresql":
+        messages.warning(request, POSTGRESQL_BACKUP_DISABLED_MSG)
     return _render_backup_dashboard(request, BackupUploadForm())
 
 
 @superuser_required
 @require_POST
 def backup_create(request):
+    if connection.vendor == "postgresql":
+        messages.error(request, POSTGRESQL_BACKUP_DISABLED_MSG)
+        return redirect("backup")
     try:
         backup_path = create_local_backup()
     except BackupError as exc:
@@ -1649,6 +1660,9 @@ def backup_create(request):
 
 @superuser_required
 def backup_download(request, filename):
+    if connection.vendor == "postgresql":
+        messages.error(request, POSTGRESQL_BACKUP_DISABLED_MSG)
+        return redirect("backup")
     try:
         path = backup_file_path(filename)
     except BackupError as exc:
@@ -1660,6 +1674,9 @@ def backup_download(request, filename):
 @superuser_required
 @require_POST
 def restore_upload(request):
+    if connection.vendor == "postgresql":
+        messages.error(request, POSTGRESQL_BACKUP_DISABLED_MSG)
+        return redirect("backup")
     form = BackupUploadForm(request.POST, request.FILES)
     if not form.is_valid():
         messages.error(request, "Restore upload failed. Please choose a valid backup ZIP file.")
@@ -1684,6 +1701,9 @@ def restore_upload(request):
 
 @superuser_required
 def restore_confirm(request, token):
+    if connection.vendor == "postgresql":
+        messages.error(request, POSTGRESQL_BACKUP_DISABLED_MSG)
+        return redirect("backup")
     if request.session.get("pending_restore_token") != token:
         messages.error(request, "Restore confirmation expired. Please upload the backup again.")
         return redirect("backup")
