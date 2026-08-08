@@ -4,6 +4,12 @@
 {% block page_title %}Backup and Restore{% endblock %}
 
 {% block content %}
+{% if IS_POSTGRESQL %}
+<div class="alert alert-warning mb-4" style="background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 6px; padding: 16px;">
+    <strong>PostgreSQL Database Active</strong><br>
+    Database backup/restore from this screen is unavailable when PostgreSQL is in use. Use the configured PostgreSQL backup process instead.
+</div>
+{% else %}
 <section class="content-section backup-grid">
     <div class="backup-panel">
         <h2>Create Backup</h2>
@@ -34,6 +40,7 @@
         </form>
     </div>
 </section>
+{% endif %}
 
 <section class="content-section invoice-form-section">
     <div class="section-heading-row">

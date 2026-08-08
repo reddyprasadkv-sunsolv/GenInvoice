@@ -22,6 +22,11 @@
             {% include "includes/form_field.html" with field=form.gstin %}
         </div>
         <h2 class="form-section-title">Logo and Signature</h2>
+        {% if DJANGO_ENVIRONMENT == 'staging' %}
+            <div class="alert alert-warning mb-3 py-2 px-3 text-sm" style="background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 4px;">
+                Test environment: uploaded files may be removed during redeployment.
+            </div>
+        {% endif %}
         <div class="form-grid">
             {% include "includes/form_field.html" with field=form.logo full=True help_text="PNG, JPG, JPEG, or SVG. Maximum 2 MB. Minimum 300px x 150px." %}
             {% include "includes/form_field.html" with field=form.authorized_signature full=True help_text="PNG, JPG, JPEG, or SVG. Maximum 2 MB. Recommended 600px x 200px. Minimum 300px x 100px." %}

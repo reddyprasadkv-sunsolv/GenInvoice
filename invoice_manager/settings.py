@@ -80,6 +80,8 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "invoice_manager.urls"
 
+DJANGO_ENVIRONMENT = os.environ.get("DJANGO_ENVIRONMENT", "local").strip().lower()
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -91,6 +93,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "billing.context_processors.environment_context",
             ],
         },
     },
