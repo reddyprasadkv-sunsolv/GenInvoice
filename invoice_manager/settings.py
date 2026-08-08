@@ -205,11 +205,19 @@ STORAGES = {
 }
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = DATA_DIR / "media"
+MEDIA_ROOT = Path(os.environ.get("DJANGO_MEDIA_ROOT", DATA_DIR / "media")).expanduser()
+MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 BACKUP_ROOT = DATA_DIR / "backups"
 LOG_ROOT = DATA_DIR / "logs"
 MAX_BACKUP_UPLOAD_SIZE = 512 * 1024 * 1024
 INVOICEAPP_SERVE_LOCAL_FILES = os.environ.get("INVOICEAPP_SERVE_LOCAL_FILES", "0") == "1"
+
+_hsts_seconds = os.environ.get("DJANGO_SECURE_HSTS_SECONDS")
+if _hsts_seconds:
+    try:
+        SECURE_HSTS_SECONDS = int(_hsts_seconds)
+    except ValueError:
+        pass
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
