@@ -106,9 +106,13 @@ except ValueError:
 
 _db_sslmode = os.environ.get("DJANGO_DB_SSLMODE") or os.environ.get("DB_SSLMODE")
 
-if os.environ.get("DATABASE_URL"):
+_db_url_raw = os.environ.get("DATABASE_URL", "").strip()
+
+if _db_url_raw:
     import urllib.parse
-    _db_url = urllib.parse.urlparse(os.environ["DATABASE_URL"])
+    from django.core.exceptions import ImproperlyConfigured
+
+    _db_url = urllib.parse.urlparse(_db_url_raw)
     _scheme = _db_url.scheme.lower()
     if _scheme in ("postgres", "postgresql", "postgres+psycopg", "postgresql+psycopg"):
         _query_params = urllib.parse.parse_qs(_db_url.query)
@@ -131,6 +135,11 @@ if os.environ.get("DATABASE_URL"):
             _db_config["OPTIONS"] = _pg_options
 
         DATABASES = {"default": _db_config}
+    else:
+        if _scheme:
+            raise ImproperlyConfigured(f"Unsupported DATABASE_URL scheme: {_scheme}")
+        else:
+            raise ImproperlyConfigured("Invalid or malformed DATABASE_URL specified")
 
 elif os.environ.get("DJANGO_DB_ENGINE") == "postgresql":
     _pg_options = {}

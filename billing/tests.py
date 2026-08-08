@@ -4240,3 +4240,29 @@ class PostgreSQLSettingsTests(TestCase):
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("SQLITE_DEFAULT", res.stdout)
 
+    def test_unsupported_database_url_scheme_fails_fast(self):
+        res = self._run_settings_script(
+            {
+                "DATABASE_URL": "mysql://user:password@dbhost:3306/invoicedb",
+            },
+            "db = settings.DATABASES['default']",
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("ImproperlyConfigured", res.stderr)
+        self.assertIn("Unsupported DATABASE_URL scheme: mysql", res.stderr)
+        self.assertNotIn("user", res.stderr)
+        self.assertNotIn("password", res.stderr)
+        self.assertNotIn("dbhost", res.stderr)
+
+    def test_malformed_database_url_fails_fast(self):
+        res = self._run_settings_script(
+            {
+                "DATABASE_URL": "not-a-valid-url",
+            },
+            "db = settings.DATABASES['default']",
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("ImproperlyConfigured", res.stderr)
+        self.assertIn("Invalid or malformed DATABASE_URL specified", res.stderr)
+
+
