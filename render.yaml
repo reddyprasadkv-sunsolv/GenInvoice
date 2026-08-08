@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: personalised-invoice-manager
+    plan: free
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --noinput
+    startCommand: gunicorn invoice_manager.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "0"
+      - key: DJANGO_DB_CONN_MAX_AGE
+        value: "60"
+      - key: PYTHON_VERSION
+        value: "3.10.13"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: invoiceapp-db
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        sync: false
+
+databases:
+  - name: invoiceapp-db
+    databaseName: invoiceapp_db
+    user: invoiceapp_user
+    plan: free
