@@ -15,7 +15,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.core.management import call_command
 from django.template.loader import render_to_string
 from django.test import Client as TestClient, TestCase, override_settings
@@ -1414,6 +1414,12 @@ class PhaseFiveTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_backup_creation_and_download(self):
+        if connection.vendor != "sqlite":
+            response = self.client.post(reverse("backup_create"), follow=True)
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "Only SQLite backup is supported")
+            return
+
         logo_dir = os.path.join(self.media_root, "company_logos")
         os.makedirs(logo_dir, exist_ok=True)
         with open(os.path.join(logo_dir, "logo.png"), "wb") as logo_file:
@@ -3878,6 +3884,8 @@ class BackupRestoreSecurityTests(TestCase):
 
     @patch("billing.backup._apply_restore")
     def test_14_restore_creates_pre_restore_safety_backup(self, mock_apply_restore):
+        if connection.vendor != "sqlite":
+            self.skipTest("Local SQLite backup/restore feature is SQLite-specific")
         with override_settings(BACKUP_ROOT=self.backup_dir, MEDIA_ROOT=self.media_dir):
             files = self._valid_backup_files()
             zip_path = self._create_zip_with_files(files)
