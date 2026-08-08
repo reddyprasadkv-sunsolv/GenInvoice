@@ -98,30 +98,68 @@ TEMPLATES = [
 WSGI_APPLICATION = "invoice_manager.wsgi.application"
 
 
-if os.environ.get("DATABASE_URL"):
+try:
+    _conn_max_age_env = os.environ.get("DJANGO_DB_CONN_MAX_AGE") or os.environ.get("CONN_MAX_AGE")
+    _conn_max_age = int(_conn_max_age_env) if _conn_max_age_env is not None else (60 if not DEBUG else 0)
+except ValueError:
+    _conn_max_age = 0
+
+_db_sslmode = os.environ.get("DJANGO_DB_SSLMODE") or os.environ.get("DB_SSLMODE")
+
+_db_url_raw = os.environ.get("DATABASE_URL", "").strip()
+
+if _db_url_raw:
     import urllib.parse
-    _db_url = urllib.parse.urlparse(os.environ["DATABASE_URL"])
-    DATABASES = {
-        "default": {
+    from django.core.exceptions import ImproperlyConfigured
+
+    _db_url = urllib.parse.urlparse(_db_url_raw)
+    _scheme = _db_url.scheme.lower()
+    if _scheme in ("postgres", "postgresql", "postgres+psycopg", "postgresql+psycopg"):
+        _query_params = urllib.parse.parse_qs(_db_url.query)
+
+        _pg_options = {}
+        _ssl_val = _db_sslmode or (_query_params.get("sslmode", [None])[0])
+        if _ssl_val:
+            _pg_options["sslmode"] = _ssl_val
+
+        _db_config = {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": _db_url.path.lstrip("/"),
-            "USER": _db_url.username or "",
-            "PASSWORD": _db_url.password or "",
+            "NAME": urllib.parse.unquote(_db_url.path.lstrip("/")),
+            "USER": urllib.parse.unquote(_db_url.username or ""),
+            "PASSWORD": urllib.parse.unquote(_db_url.password or ""),
             "HOST": _db_url.hostname or "localhost",
             "PORT": str(_db_url.port or 5432),
+            "CONN_MAX_AGE": _conn_max_age,
         }
-    }
+        if _pg_options:
+            _db_config["OPTIONS"] = _pg_options
+
+        DATABASES = {"default": _db_config}
+    else:
+        if _scheme:
+            raise ImproperlyConfigured(f"Unsupported DATABASE_URL scheme: {_scheme}")
+        else:
+            raise ImproperlyConfigured("Invalid or malformed DATABASE_URL specified")
+
 elif os.environ.get("DJANGO_DB_ENGINE") == "postgresql":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("DJANGO_DB_NAME", "invoiceapp"),
-            "USER": os.environ.get("DJANGO_DB_USER", "postgres"),
-            "PASSWORD": os.environ.get("DJANGO_DB_PASSWORD", ""),
-            "HOST": os.environ.get("DJANGO_DB_HOST", "localhost"),
-            "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
-        }
+    _pg_options = {}
+    if _db_sslmode:
+        _pg_options["sslmode"] = _db_sslmode
+
+    _db_config = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("DJANGO_DB_NAME", "invoiceapp"),
+        "USER": os.environ.get("DJANGO_DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("DJANGO_DB_PASSWORD", ""),
+        "HOST": os.environ.get("DJANGO_DB_HOST", "localhost"),
+        "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
+        "CONN_MAX_AGE": _conn_max_age,
     }
+    if _pg_options:
+        _db_config["OPTIONS"] = _pg_options
+
+    DATABASES = {"default": _db_config}
+
 else:
     DATABASES = {
         "default": {
