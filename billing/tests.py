@@ -19,7 +19,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, connection, transaction
 from django.core.management import call_command
 from django.template.loader import render_to_string
-from django.test import Client as TestClient, TestCase, TransactionTestCase, override_settings
+from django.test import Client as TestClient, Client as DjangoTestClient, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 
 from .forms import ClientForm, CompanyForm, DeveloperVendorForm, InvoiceForm, ProjectAssignmentForm, ProjectForm
