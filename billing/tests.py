@@ -10,6 +10,7 @@ import start_app
 from datetime import date, timedelta
 from pathlib import Path
 from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -18,7 +19,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, connection, transaction
 from django.core.management import call_command
 from django.template.loader import render_to_string
-from django.test import Client as TestClient, TestCase, override_settings
+from django.test import Client as TestClient, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 
 from .forms import ClientForm, CompanyForm, DeveloperVendorForm, InvoiceForm, ProjectAssignmentForm, ProjectForm
@@ -4362,4 +4363,218 @@ class FreeTierStagingHardeningTests(TestCase):
         response = anon_client.get(url)
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response.url)
+
+
+class FinancialConcurrencyTests(TransactionTestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(username="admin_conc", email="admin_conc@example.com", password="password123")
+        self.client_user = DjangoTestClient()
+        self.client_user.login(username="admin_conc", password="password123")
+
+        self.company = Company.objects.create(
+            company_name="Concurrency Corp",
+            address="123 Tech Park",
+            country="India",
+            state="Telangana",
+            city="Hyderabad",
+            pin_code="500081",
+            gstin="36AAAAA0000A1Z5",
+        )
+        self.client_record = Client.objects.create(
+            client_name="Concurrent Client",
+            address="456 Market St",
+            country="India",
+            state="Karnataka",
+            city="Bengaluru",
+            pin_code="560001",
+            client_status=Client.ClientStatus.ACTIVE,
+        )
+
+    def test_1_concurrent_invoice_payment_overpayment_protected(self):
+        invoice = Invoice.objects.create(
+            company=self.company,
+            client=self.client_record,
+            invoice_number="INV-CONC-001",
+            invoice_date=date.today(),
+            invoice_status=Invoice.InvoiceStatus.FINAL,
+            subtotal=Decimal("10000.00"),
+            total_amount=Decimal("10000.00"),
+            received_amount=Decimal("8000.00"),
+            pending_amount=Decimal("2000.00"),
+            payment_status=Invoice.PaymentStatus.PARTIALLY_PAID,
+        )
+
+        def make_payment(amount_str):
+            c = DjangoTestClient()
+            c.login(username="admin_conc", password="password123")
+            url = reverse("invoice_add_payment", kwargs={"pk": invoice.pk})
+            return c.post(url, {
+                "received_amount": amount_str,
+                "payment_date": date.today().strftime("%Y-%m-%d"),
+                "payment_mode": "Bank Transfer",
+                "remarks": "Concurrent test payment",
+            })
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            f1 = executor.submit(make_payment, "2000.00")
+            f2 = executor.submit(make_payment, "2000.00")
+            r1 = f1.result()
+            r2 = f2.result()
+
+        invoice.refresh_from_db()
+        self.assertLessEqual(invoice.received_amount, Decimal("10000.00"))
+        self.assertEqual(invoice.payments.count(), 1)
+
+    def test_2_concurrent_project_assignment_unique_race_handled(self):
+        project = Project.objects.create(
+            project_name="Concurrent PRJ",
+            client=self.client_record,
+            project_requirement="Testing concurrency",
+            project_type=Project.ProjectType.WEB_APPLICATION,
+            estimated_quote=Decimal("50000.00"),
+            approved_quote=Decimal("50000.00"),
+        )
+        vendor = DeveloperVendor.objects.create(
+            name="Concurrent Dev Vendor",
+            vendor_type=DeveloperVendor.VendorType.INDIVIDUAL_DEVELOPER,
+            status=DeveloperVendor.VendorStatus.ACTIVE,
+        )
+
+        def assign_dev():
+            c = DjangoTestClient()
+            c.login(username="admin_conc", password="password123")
+            url = reverse("project_assign_developer", kwargs={"pk": project.pk})
+            return c.post(url, {
+                "developer_vendor": vendor.pk,
+                "assigned_role": "Backend Lead",
+                "work_description": "API work",
+                "developer_cost_estimate": "20000.00",
+                "developer_final_project_cost": "20000.00",
+                "assignment_status": ProjectAssignment.AssignmentStatus.ASSIGNED,
+            })
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            f1 = executor.submit(assign_dev)
+            f2 = executor.submit(assign_dev)
+            r1 = f1.result()
+            r2 = f2.result()
+
+        self.assertEqual(ProjectAssignment.objects.filter(project=project, developer_vendor=vendor).count(), 1)
+        self.assertIn(r1.status_code, [200, 302])
+        self.assertIn(r2.status_code, [200, 302])
+
+    def test_3_concurrent_developer_payment_overpayment_protected(self):
+        project = Project.objects.create(
+            project_name="Dev Payment PRJ",
+            client=self.client_record,
+            project_requirement="Testing dev payments",
+            project_type=Project.ProjectType.WEB_APPLICATION,
+            approved_quote=Decimal("50000.00"),
+        )
+        vendor = DeveloperVendor.objects.create(
+            name="Dev Payment Vendor",
+            vendor_type=DeveloperVendor.VendorType.INDIVIDUAL_DEVELOPER,
+            status=DeveloperVendor.VendorStatus.ACTIVE,
+        )
+        assignment = ProjectAssignment.objects.create(
+            project=project,
+            developer_vendor=vendor,
+            assigned_role="Developer",
+            developer_cost_estimate=Decimal("10000.00"),
+            developer_final_project_cost=Decimal("10000.00"),
+            total_amount_paid_to_developer=Decimal("8000.00"),
+            pending_amount_to_developer=Decimal("2000.00"),
+        )
+
+        def pay_dev(amount_str):
+            c = DjangoTestClient()
+            c.login(username="admin_conc", password="password123")
+            url = reverse("assignment_add_developer_payment", kwargs={"pk": assignment.pk})
+            return c.post(url, {
+                "amount_paid": amount_str,
+                "payment_date": date.today().strftime("%Y-%m-%d"),
+                "payment_mode": "Bank Transfer",
+                "payment_type": "Final Payment",
+                "remarks": "Concurrent dev payment",
+            })
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            f1 = executor.submit(pay_dev, "3000.00")
+            f2 = executor.submit(pay_dev, "3000.00")
+            r1 = f1.result()
+            r2 = f2.result()
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.developer_payments.count(), 0)
+        self.assertEqual(assignment.total_amount_paid_to_developer, Decimal("8000.00"))
+
+    def test_4_concurrent_project_client_payment_overpayment_protected(self):
+        project = Project.objects.create(
+            project_name="Client Payment PRJ",
+            client=self.client_record,
+            project_requirement="Testing client payments",
+            project_type=Project.ProjectType.WEB_APPLICATION,
+            approved_quote=Decimal("10000.00"),
+            client_total_amount_received=Decimal("8000.00"),
+            client_pending_amount=Decimal("2000.00"),
+        )
+
+        def pay_client_proj(amount_str):
+            c = DjangoTestClient()
+            c.login(username="admin_conc", password="password123")
+            url = reverse("project_add_client_payment", kwargs={"pk": project.pk})
+            return c.post(url, {
+                "amount_received": amount_str,
+                "payment_date": date.today().strftime("%Y-%m-%d"),
+                "payment_mode": "Bank Transfer",
+                "payment_type": "Final Payment",
+                "remarks": "Concurrent client project payment",
+            })
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            f1 = executor.submit(pay_client_proj, "3000.00")
+            f2 = executor.submit(pay_client_proj, "3000.00")
+            r1 = f1.result()
+            r2 = f2.result()
+
+        project.refresh_from_db()
+        self.assertEqual(project.client_payments.count(), 0)
+        self.assertEqual(project.client_total_amount_received, Decimal("8000.00"))
+
+    def test_5_concurrent_invoice_creation_race_handled(self):
+        def create_invoice_post():
+            c = DjangoTestClient()
+            c.login(username="admin_conc", password="password123")
+            url = reverse("invoice_add")
+            return c.post(url, {
+                "company": self.company.pk,
+                "client": self.client_record.pk,
+                "invoice_date": date.today().strftime("%Y-%m-%d"),
+                "currency": "INR",
+                "subject": "Concurrent Invoice Test",
+                "apply_gst": "True",
+                "terms_and_conditions": "Standard terms",
+                "declaration": "Standard declaration",
+                "invoice_action": "final",
+                "items-TOTAL_FORMS": "1",
+                "items-INITIAL_FORMS": "0",
+                "items-MIN_NUM_FORMS": "0",
+                "items-MAX_NUM_FORMS": "1000",
+                "items-0-description": "Development Service",
+                "items-0-item_price": "5000.00",
+                "items-0-quantity": "1.00",
+            })
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            f1 = executor.submit(create_invoice_post)
+            f2 = executor.submit(create_invoice_post)
+            r1 = f1.result()
+            r2 = f2.result()
+
+        invoices = Invoice.objects.filter(company=self.company, client=self.client_record)
+        invoice_numbers = list(invoices.values_list("invoice_number", flat=True))
+        self.assertEqual(len(invoice_numbers), len(set(invoice_numbers)))
+        self.assertEqual(invoices.count(), 2)
+        self.assertEqual(r1.status_code, 302)
+        self.assertEqual(r2.status_code, 302)
 

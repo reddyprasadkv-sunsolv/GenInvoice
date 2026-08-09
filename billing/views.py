@@ -792,31 +792,41 @@ def _save_invoice_with_items(request, invoice, formset, created, save_as_draft=F
         invoice.pending_amount = to_money(invoice.total_amount)
         invoice.payment_status = Invoice.PaymentStatus.PENDING
 
-    try:
-        with transaction.atomic():
-            invoice.save()
-            InvoiceItem.objects.filter(invoice=invoice).delete()
-            InvoiceItem.objects.bulk_create(
-                [
-                    InvoiceItem(
-                        invoice=invoice,
-                        serial_number=item["serial_number"],
-                        description=item["description"],
-                        hsn_sac_code=item.get("hsn_sac_code"),
-                        item_price=item["item_price"],
-                        quantity=item["quantity"],
-                        total=item["total"],
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            with transaction.atomic():
+                if attempt > 0 and (created or finalizing_draft):
+                    invoice.invoice_number = (
+                        generate_draft_invoice_number(invoice.invoice_date)
+                        if save_as_draft
+                        else generate_invoice_number(invoice.company, invoice.client, invoice.invoice_date)
                     )
-                    for item in calculated["items"]
-                ]
-            )
-            if finalizing_draft:
-                Payment.objects.filter(invoice=invoice).delete()
-            recalculate_invoice_payments(invoice)
-    except IntegrityError:
-        messages.error(request, "Invoice number already exists. Please try again.")
-        return False
-    return True
+                invoice.save()
+                InvoiceItem.objects.filter(invoice=invoice).delete()
+                InvoiceItem.objects.bulk_create(
+                    [
+                        InvoiceItem(
+                            invoice=invoice,
+                            serial_number=item["serial_number"],
+                            description=item["description"],
+                            hsn_sac_code=item.get("hsn_sac_code"),
+                            item_price=item["item_price"],
+                            quantity=item["quantity"],
+                            total=item["total"],
+                        )
+                        for item in calculated["items"]
+                    ]
+                )
+                if finalizing_draft:
+                    Payment.objects.filter(invoice=invoice).delete()
+                recalculate_invoice_payments(invoice)
+                return True
+        except IntegrityError:
+            if attempt == max_retries - 1 or not (created or finalizing_draft):
+                messages.error(request, "Invoice number already exists. Please try again.")
+                return False
+    return False
 
 
 def _payment_status(invoice):
@@ -837,10 +847,24 @@ def invoice_add_payment(request, pk):
         form = PaymentForm(request.POST, invoice=invoice)
         if form.is_valid():
             payment = form.save(commit=False)
-            payment.invoice = invoice
+            overpaid = False
             with transaction.atomic():
-                payment.save()
-                recalculate_invoice_payments(invoice)
+                locked_invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
+                total_received = (
+                    locked_invoice.payments.aggregate(total=Sum("received_amount")).get("total") or Decimal("0.00")
+                )
+                current_pending = to_money(locked_invoice.total_amount - total_received)
+                if current_pending < Decimal("0.00"):
+                    current_pending = Decimal("0.00")
+                if payment.received_amount > current_pending:
+                    overpaid = True
+                else:
+                    payment.invoice = locked_invoice
+                    payment.save()
+                    recalculate_invoice_payments(locked_invoice)
+            if overpaid:
+                form.add_error("received_amount", "Payment amount cannot exceed the invoice pending amount.")
+                return render(request, "billing/payment_form.html", {"form": form, "invoice": invoice})
             log_activity(request, "payment added", "Invoice", f"Payment recorded for invoice: {invoice.invoice_number}", invoice.pk)
             messages.success(request, "Payment recorded.")
             return redirect("invoice_detail", pk=invoice.pk)
@@ -920,46 +944,53 @@ def invoice_clone(request, pk):
         for item in source.items.all()
     ]
     calculated = calculate_invoice_totals(item_rows, source.company, apply_gst=source.apply_gst, currency=source.currency)
-    clone = Invoice(
-        invoice_number=generate_draft_invoice_number(invoice_date),
-        company=source.company,
-        client=source.client,
-        project=source.project,
-        invoice_date=invoice_date,
-        currency=source.currency,
-        subject=source.subject,
-        apply_gst=bool(source.apply_gst and source.company.gstin),
-        subtotal=calculated["subtotal"],
-        gst_percentage=calculated["gst_percentage"],
-        gst_amount=calculated["gst_amount"],
-        total_amount=calculated["total_amount"],
-        amount_in_words=calculated["amount_in_words"],
-        terms_and_conditions=source.terms_and_conditions,
-        declaration=source.declaration,
-        payment_status=Invoice.PaymentStatus.PENDING,
-        invoice_status=Invoice.InvoiceStatus.DRAFT,
-        received_amount=to_money(0),
-        pending_amount=calculated["total_amount"],
-    )
-    with transaction.atomic():
-        clone.save()
-        InvoiceItem.objects.bulk_create(
-            [
-                InvoiceItem(
-                    invoice=clone,
-                    serial_number=item["serial_number"],
-                    description=item["description"],
-                    hsn_sac_code=item.get("hsn_sac_code"),
-                    item_price=item["item_price"],
-                    quantity=item["quantity"],
-                    total=item["total"],
-                )
-                for item in calculated["items"]
-            ]
+    max_retries = 5
+    for attempt in range(max_retries):
+        clone = Invoice(
+            invoice_number=generate_draft_invoice_number(invoice_date),
+            company=source.company,
+            client=source.client,
+            project=source.project,
+            invoice_date=invoice_date,
+            currency=source.currency,
+            subject=source.subject,
+            apply_gst=bool(source.apply_gst and source.company.gstin),
+            subtotal=calculated["subtotal"],
+            gst_percentage=calculated["gst_percentage"],
+            gst_amount=calculated["gst_amount"],
+            total_amount=calculated["total_amount"],
+            amount_in_words=calculated["amount_in_words"],
+            terms_and_conditions=source.terms_and_conditions,
+            declaration=source.declaration,
+            payment_status=Invoice.PaymentStatus.PENDING,
+            invoice_status=Invoice.InvoiceStatus.DRAFT,
+            received_amount=to_money(0),
+            pending_amount=calculated["total_amount"],
         )
-    log_activity(request, "cloned", "Invoice", f"Invoice cloned from {source.invoice_number} to {clone.invoice_number}", clone.pk)
-    messages.success(request, f"Draft invoice created from {source.invoice_number}.")
-    return redirect("invoice_edit", pk=clone.pk)
+        try:
+            with transaction.atomic():
+                clone.save()
+                InvoiceItem.objects.bulk_create(
+                    [
+                        InvoiceItem(
+                            invoice=clone,
+                            serial_number=item["serial_number"],
+                            description=item["description"],
+                            hsn_sac_code=item.get("hsn_sac_code"),
+                            item_price=item["item_price"],
+                            quantity=item["quantity"],
+                            total=item["total"],
+                        )
+                        for item in calculated["items"]
+                    ]
+                )
+            log_activity(request, "cloned", "Invoice", f"Invoice cloned from {source.invoice_number} to {clone.invoice_number}", clone.pk)
+            messages.success(request, f"Draft invoice created from {source.invoice_number}.")
+            return redirect("invoice_edit", pk=clone.pk)
+        except IntegrityError:
+            if attempt == max_retries - 1:
+                messages.error(request, "Unable to generate unique draft invoice number. Please try again.")
+                return redirect("invoice_detail", pk=source.pk)
 
 
 class ProjectListView(PageSizeMixin, LoginRequiredMixin, ListView):
@@ -1102,10 +1133,28 @@ def project_add_client_payment(request, pk):
         form = ProjectClientPaymentForm(request.POST, project=project)
         if form.is_valid():
             payment = form.save(commit=False)
-            payment.project = project
+            requires_extra_confirmation = False
             with transaction.atomic():
-                payment.save()
-                recalculate_project_client_payments(project)
+                locked_project = Project.objects.select_for_update().get(pk=project.pk)
+                quote = (
+                    locked_project.project_total_with_gst
+                    or locked_project.approved_quote
+                    or locked_project.estimated_quote
+                    or Decimal("0.00")
+                )
+                current_received = (
+                    locked_project.client_payments.aggregate(total=Sum("amount_received")).get("total") or Decimal("0.00")
+                )
+                total_after = current_received + payment.amount_received
+                if quote > 0 and total_after > quote and not form.cleaned_data.get("allow_extra_payment"):
+                    requires_extra_confirmation = True
+                else:
+                    payment.project = locked_project
+                    payment.save()
+                    recalculate_project_client_payments(locked_project)
+            if requires_extra_confirmation:
+                form.add_error("allow_extra_payment", "Confirm extra payment because received amount exceeds the project quote.")
+                return render(request, "billing/project_client_payment_form.html", {"form": form, "project": project, "is_edit": False})
             log_activity(request, "payment added", "Project", f"Client payment recorded for project: {project.project_name}", project.pk)
             messages.success(request, "Client project payment recorded.")
             return redirect("project_detail", pk=project.pk)
@@ -1125,9 +1174,28 @@ def project_edit_client_payment(request, project_pk, payment_pk):
     if request.method == "POST":
         form = ProjectClientPaymentForm(request.POST, project=project, instance=payment)
         if form.is_valid():
+            requires_extra_confirmation = False
             with transaction.atomic():
-                form.save()
-                recalculate_project_client_payments(project)
+                locked_project = Project.objects.select_for_update().get(pk=project.pk)
+                quote = (
+                    locked_project.project_total_with_gst
+                    or locked_project.approved_quote
+                    or locked_project.estimated_quote
+                    or Decimal("0.00")
+                )
+                current_received = (
+                    locked_project.client_payments.exclude(pk=payment.pk).aggregate(total=Sum("amount_received")).get("total")
+                    or Decimal("0.00")
+                )
+                total_after = current_received + form.cleaned_data["amount_received"]
+                if quote > 0 and total_after > quote and not form.cleaned_data.get("allow_extra_payment"):
+                    requires_extra_confirmation = True
+                else:
+                    form.save()
+                    recalculate_project_client_payments(locked_project)
+            if requires_extra_confirmation:
+                form.add_error("allow_extra_payment", "Confirm extra payment because received amount exceeds the project quote.")
+                return render(request, "billing/project_client_payment_form.html", {"form": form, "project": project, "payment": payment, "is_edit": True})
             log_activity(request, "payment updated", "Project", f"Client payment updated for project: {project.project_name}", project.pk)
             messages.success(request, "Client project payment updated.")
             return redirect("project_detail", pk=project.pk)
@@ -1152,9 +1220,13 @@ def project_assign_developer(request, pk):
             assignment.developer_final_project_cost = assignment.developer_final_project_cost or Decimal("0.00")
             assignment.advance_amount_sent = assignment.advance_amount_sent or Decimal("0.00")
             assignment.next_advance_amount_to_send = assignment.next_advance_amount_to_send or Decimal("0.00")
-            with transaction.atomic():
-                assignment.save()
-                recalculate_assignment_payments(assignment)
+            try:
+                with transaction.atomic():
+                    assignment.save()
+                    recalculate_assignment_payments(assignment)
+            except IntegrityError:
+                form.add_error("developer_vendor", f"This developer/vendor is already assigned to {project.project_name}.")
+                return render(request, "billing/project_assignment_form.html", {"form": form, "project": project})
             log_activity(request, "developer assigned", "Project", f"Developer/vendor assigned to project: {project.project_name}", project.pk)
             messages.success(request, "Developer/vendor assigned to project.")
             return redirect("project_detail", pk=project.pk)
@@ -1173,10 +1245,27 @@ def assignment_add_developer_payment(request, pk):
         form = DeveloperPaymentForm(request.POST, assignment=assignment)
         if form.is_valid():
             payment = form.save(commit=False)
-            payment.project_assignment = assignment
+            requires_extra_confirmation = False
             with transaction.atomic():
-                payment.save()
-                recalculate_assignment_payments(assignment)
+                locked_assignment = ProjectAssignment.objects.select_for_update().get(pk=assignment.pk)
+                cost = (
+                    locked_assignment.developer_final_project_cost
+                    or locked_assignment.developer_cost_estimate
+                    or Decimal("0.00")
+                )
+                current_paid = (
+                    locked_assignment.developer_payments.aggregate(total=Sum("amount_paid")).get("total") or Decimal("0.00")
+                )
+                total_after = current_paid + payment.amount_paid
+                if cost > 0 and total_after > cost and not form.cleaned_data.get("allow_extra_payment"):
+                    requires_extra_confirmation = True
+                else:
+                    payment.project_assignment = locked_assignment
+                    payment.save()
+                    recalculate_assignment_payments(locked_assignment)
+            if requires_extra_confirmation:
+                form.add_error("allow_extra_payment", "Confirm extra payment because paid amount exceeds developer cost.")
+                return render(request, "billing/developer_payment_form.html", {"form": form, "assignment": assignment})
             log_activity(request, "payment added", "Project", f"Developer/vendor payment recorded for project: {assignment.project.project_name}", assignment.project.pk)
             messages.success(request, "Developer/vendor payment recorded.")
             return redirect("project_detail", pk=assignment.project.pk)
