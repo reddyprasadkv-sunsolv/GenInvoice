@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor
+from unittest import skipIf
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -4365,6 +4366,7 @@ class FreeTierStagingHardeningTests(TestCase):
         self.assertIn("/accounts/login/", response.url)
 
 
+@skipIf(connection.vendor == "sqlite", "Multi-threaded concurrency tests require PostgreSQL backend")
 class FinancialConcurrencyTests(TransactionTestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_superuser(username="admin_conc", email="admin_conc@example.com", password="password123")
