@@ -1419,7 +1419,7 @@ class PhaseFiveTests(TestCase):
         if connection.vendor != "sqlite":
             response = self.client.post(reverse("backup_create"), follow=True)
             self.assertEqual(response.status_code, 200)
-            self.assertContains(response, "Only SQLite backup is supported")
+            self.assertContains(response, "unavailable when PostgreSQL is in use")
             return
 
         logo_dir = os.path.join(self.media_root, "company_logos")
@@ -1447,6 +1447,12 @@ class PhaseFiveTests(TestCase):
         self.assertTrue(downloaded_bytes.startswith(b"PK"))
 
     def test_restore_upload_rejects_path_traversal_zip(self):
+        if connection.vendor != "sqlite":
+            response = self.client.post(reverse("restore_upload"), follow=True)
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "unavailable when PostgreSQL is in use")
+            return
+
         payload = zip_bytes(
             {
                 "backup_manifest.json": "{}",
@@ -1463,6 +1469,12 @@ class PhaseFiveTests(TestCase):
         self.assertContains(response, "unsafe file path")
 
     def test_restore_upload_rejects_executable_files(self):
+        if connection.vendor != "sqlite":
+            response = self.client.post(reverse("restore_upload"), follow=True)
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "unavailable when PostgreSQL is in use")
+            return
+
         payload = zip_bytes(
             {
                 "backup_manifest.json": "{}",
@@ -4405,6 +4417,13 @@ class FinancialConcurrencyTests(TransactionTestCase):
             pending_amount=Decimal("2000.00"),
             payment_status=Invoice.PaymentStatus.PARTIALLY_PAID,
         )
+        Payment.objects.create(
+            invoice=invoice,
+            received_amount=Decimal("8000.00"),
+            payment_date=date.today(),
+            payment_mode="Bank Transfer",
+            remarks="Initial partial payment",
+        )
 
         def make_payment(amount_str):
             c = DjangoTestClient()
@@ -4425,7 +4444,7 @@ class FinancialConcurrencyTests(TransactionTestCase):
 
         invoice.refresh_from_db()
         self.assertLessEqual(invoice.received_amount, Decimal("10000.00"))
-        self.assertEqual(invoice.payments.count(), 1)
+        self.assertEqual(invoice.payments.count(), 2)
 
     def test_2_concurrent_project_assignment_unique_race_handled(self):
         project = Project.objects.create(
@@ -4579,4 +4598,57 @@ class FinancialConcurrencyTests(TransactionTestCase):
         self.assertEqual(invoices.count(), 2)
         self.assertEqual(r1.status_code, 302)
         self.assertEqual(r2.status_code, 302)
+
+
+class OperationalDataMigrationToolTests(TestCase):
+    def test_migration_tool_requires_postgresql_vendor(self):
+        from django.core.management.base import CommandError
+        temp_dir = tempfile.mkdtemp()
+        dummy_sqlite = Path(temp_dir) / "dummy.sqlite3"
+        try:
+            import sqlite3
+            s_conn = sqlite3.connect(dummy_sqlite)
+            s_conn.execute("PRAGMA user_version = 1;")
+            s_conn.commit()
+            s_conn.close()
+
+            with patch("django.db.connection.vendor", "sqlite"):
+                with self.assertRaises(CommandError) as ctx:
+                    call_command("migrate_operational_data", source_sqlite=str(dummy_sqlite), confirm=True)
+                self.assertIn("must be PostgreSQL", str(ctx.exception))
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_migration_tool_rejects_missing_source(self):
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError) as ctx:
+            call_command("migrate_operational_data", source_sqlite="/invalid/path/db.sqlite3", confirm=True)
+        self.assertIn("does not exist", str(ctx.exception))
+
+    def test_migration_tool_rejects_non_empty_target(self):
+        from django.core.management.base import CommandError
+        Company.objects.create(
+            company_name="Test Co",
+            address="123 Street",
+            country="India",
+            state="TN",
+            city="Chennai",
+            pin_code="600001",
+        )
+        temp_dir = tempfile.mkdtemp()
+        dummy_sqlite = Path(temp_dir) / "dummy.sqlite3"
+        try:
+            import sqlite3
+            s_conn = sqlite3.connect(dummy_sqlite)
+            s_conn.execute("CREATE TABLE billing_company (id INTEGER PRIMARY KEY);")
+            s_conn.commit()
+            s_conn.close()
+
+            with patch("django.db.connection.vendor", "postgresql"):
+                with self.assertRaises(CommandError) as ctx:
+                    call_command("migrate_operational_data", source_sqlite=str(dummy_sqlite), confirm=True)
+                self.assertIn("SAFETY BLOCK", str(ctx.exception))
+        finally:
+            shutil.rmtree(temp_dir)
+
 
