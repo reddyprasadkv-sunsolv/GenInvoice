@@ -10,6 +10,7 @@ import start_app
 from datetime import date, timedelta
 from pathlib import Path
 from decimal import Decimal
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from unittest import skipIf
 from unittest.mock import patch
@@ -4425,22 +4426,33 @@ class FinancialConcurrencyTests(TransactionTestCase):
             remarks="Initial partial payment",
         )
 
-        def make_payment(amount_str):
-            c = DjangoTestClient()
-            c.login(username="admin_conc", password="password123")
-            url = reverse("invoice_add_payment", kwargs={"pk": invoice.pk})
-            return c.post(url, {
-                "received_amount": amount_str,
-                "payment_date": date.today().strftime("%Y-%m-%d"),
-                "payment_mode": "Bank Transfer",
-                "remarks": "Concurrent test payment",
-            })
+        results = {}
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            f1 = executor.submit(make_payment, "2000.00")
-            f2 = executor.submit(make_payment, "2000.00")
-            r1 = f1.result()
-            r2 = f2.result()
+        def make_payment(amount_str, key):
+            c = DjangoTestClient()
+            try:
+                c.login(username="admin_conc", password="password123")
+                url = reverse("invoice_add_payment", kwargs={"pk": invoice.pk})
+                results[key] = c.post(url, {
+                    "received_amount": amount_str,
+                    "payment_date": date.today().strftime("%Y-%m-%d"),
+                    "payment_mode": "Bank Transfer",
+                    "remarks": "Concurrent test payment",
+                })
+            finally:
+                # Close this thread's Django/psycopg3 connection so that
+                # TransactionTestCase teardown can DROP the test database.
+                from django.db import connection as _conn
+                _conn.close()
+
+        t1 = threading.Thread(target=make_payment, args=("2000.00", "r1"))
+        t2 = threading.Thread(target=make_payment, args=("2000.00", "r2"))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+        r1 = results["r1"]
+        r2 = results["r2"]
 
         invoice.refresh_from_db()
         self.assertLessEqual(invoice.received_amount, Decimal("10000.00"))
@@ -4461,24 +4473,33 @@ class FinancialConcurrencyTests(TransactionTestCase):
             status=DeveloperVendor.VendorStatus.ACTIVE,
         )
 
-        def assign_dev():
-            c = DjangoTestClient()
-            c.login(username="admin_conc", password="password123")
-            url = reverse("project_assign_developer", kwargs={"pk": project.pk})
-            return c.post(url, {
-                "developer_vendor": vendor.pk,
-                "assigned_role": "Backend Lead",
-                "work_description": "API work",
-                "developer_cost_estimate": "20000.00",
-                "developer_final_project_cost": "20000.00",
-                "assignment_status": ProjectAssignment.AssignmentStatus.ASSIGNED,
-            })
+        results = {}
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            f1 = executor.submit(assign_dev)
-            f2 = executor.submit(assign_dev)
-            r1 = f1.result()
-            r2 = f2.result()
+        def assign_dev(key):
+            c = DjangoTestClient()
+            try:
+                c.login(username="admin_conc", password="password123")
+                url = reverse("project_assign_developer", kwargs={"pk": project.pk})
+                results[key] = c.post(url, {
+                    "developer_vendor": vendor.pk,
+                    "assigned_role": "Backend Lead",
+                    "work_description": "API work",
+                    "developer_cost_estimate": "20000.00",
+                    "developer_final_project_cost": "20000.00",
+                    "assignment_status": ProjectAssignment.AssignmentStatus.ASSIGNED,
+                })
+            finally:
+                from django.db import connection as _conn
+                _conn.close()
+
+        t1 = threading.Thread(target=assign_dev, args=("r1",))
+        t2 = threading.Thread(target=assign_dev, args=("r2",))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+        r1 = results["r1"]
+        r2 = results["r2"]
 
         self.assertEqual(ProjectAssignment.objects.filter(project=project, developer_vendor=vendor).count(), 1)
         self.assertIn(r1.status_code, [200, 302])
@@ -4507,23 +4528,32 @@ class FinancialConcurrencyTests(TransactionTestCase):
             pending_amount_to_developer=Decimal("2000.00"),
         )
 
-        def pay_dev(amount_str):
-            c = DjangoTestClient()
-            c.login(username="admin_conc", password="password123")
-            url = reverse("assignment_add_developer_payment", kwargs={"pk": assignment.pk})
-            return c.post(url, {
-                "amount_paid": amount_str,
-                "payment_date": date.today().strftime("%Y-%m-%d"),
-                "payment_mode": "Bank Transfer",
-                "payment_type": "Final Payment",
-                "remarks": "Concurrent dev payment",
-            })
+        results = {}
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            f1 = executor.submit(pay_dev, "3000.00")
-            f2 = executor.submit(pay_dev, "3000.00")
-            r1 = f1.result()
-            r2 = f2.result()
+        def pay_dev(amount_str, key):
+            c = DjangoTestClient()
+            try:
+                c.login(username="admin_conc", password="password123")
+                url = reverse("assignment_add_developer_payment", kwargs={"pk": assignment.pk})
+                results[key] = c.post(url, {
+                    "amount_paid": amount_str,
+                    "payment_date": date.today().strftime("%Y-%m-%d"),
+                    "payment_mode": "Bank Transfer",
+                    "payment_type": "Final Payment",
+                    "remarks": "Concurrent dev payment",
+                })
+            finally:
+                from django.db import connection as _conn
+                _conn.close()
+
+        t1 = threading.Thread(target=pay_dev, args=("3000.00", "r1"))
+        t2 = threading.Thread(target=pay_dev, args=("3000.00", "r2"))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+        r1 = results["r1"]
+        r2 = results["r2"]
 
         assignment.refresh_from_db()
         self.assertEqual(assignment.developer_payments.count(), 0)
@@ -4540,57 +4570,75 @@ class FinancialConcurrencyTests(TransactionTestCase):
             client_pending_amount=Decimal("2000.00"),
         )
 
-        def pay_client_proj(amount_str):
-            c = DjangoTestClient()
-            c.login(username="admin_conc", password="password123")
-            url = reverse("project_add_client_payment", kwargs={"pk": project.pk})
-            return c.post(url, {
-                "amount_received": amount_str,
-                "payment_date": date.today().strftime("%Y-%m-%d"),
-                "payment_mode": "Bank Transfer",
-                "payment_type": "Final Payment",
-                "remarks": "Concurrent client project payment",
-            })
+        results = {}
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            f1 = executor.submit(pay_client_proj, "3000.00")
-            f2 = executor.submit(pay_client_proj, "3000.00")
-            r1 = f1.result()
-            r2 = f2.result()
+        def pay_client_proj(amount_str, key):
+            c = DjangoTestClient()
+            try:
+                c.login(username="admin_conc", password="password123")
+                url = reverse("project_add_client_payment", kwargs={"pk": project.pk})
+                results[key] = c.post(url, {
+                    "amount_received": amount_str,
+                    "payment_date": date.today().strftime("%Y-%m-%d"),
+                    "payment_mode": "Bank Transfer",
+                    "payment_type": "Final Payment",
+                    "remarks": "Concurrent client project payment",
+                })
+            finally:
+                from django.db import connection as _conn
+                _conn.close()
+
+        t1 = threading.Thread(target=pay_client_proj, args=("3000.00", "r1"))
+        t2 = threading.Thread(target=pay_client_proj, args=("3000.00", "r2"))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+        r1 = results["r1"]
+        r2 = results["r2"]
 
         project.refresh_from_db()
         self.assertEqual(project.client_payments.count(), 0)
         self.assertEqual(project.client_total_amount_received, Decimal("8000.00"))
 
     def test_5_concurrent_invoice_creation_race_handled(self):
-        def create_invoice_post():
-            c = DjangoTestClient()
-            c.login(username="admin_conc", password="password123")
-            url = reverse("invoice_add")
-            return c.post(url, {
-                "company": self.company.pk,
-                "client": self.client_record.pk,
-                "invoice_date": date.today().strftime("%Y-%m-%d"),
-                "currency": "INR",
-                "subject": "Concurrent Invoice Test",
-                "apply_gst": "True",
-                "terms_and_conditions": "Standard terms",
-                "declaration": "Standard declaration",
-                "invoice_action": "final",
-                "items-TOTAL_FORMS": "1",
-                "items-INITIAL_FORMS": "0",
-                "items-MIN_NUM_FORMS": "0",
-                "items-MAX_NUM_FORMS": "1000",
-                "items-0-description": "Development Service",
-                "items-0-item_price": "5000.00",
-                "items-0-quantity": "1.00",
-            })
+        results = {}
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            f1 = executor.submit(create_invoice_post)
-            f2 = executor.submit(create_invoice_post)
-            r1 = f1.result()
-            r2 = f2.result()
+        def create_invoice_post(key):
+            c = DjangoTestClient()
+            try:
+                c.login(username="admin_conc", password="password123")
+                url = reverse("invoice_add")
+                results[key] = c.post(url, {
+                    "company": self.company.pk,
+                    "client": self.client_record.pk,
+                    "invoice_date": date.today().strftime("%Y-%m-%d"),
+                    "currency": "INR",
+                    "subject": "Concurrent Invoice Test",
+                    "apply_gst": "True",
+                    "terms_and_conditions": "Standard terms",
+                    "declaration": "Standard declaration",
+                    "invoice_action": "final",
+                    "items-TOTAL_FORMS": "1",
+                    "items-INITIAL_FORMS": "0",
+                    "items-MIN_NUM_FORMS": "0",
+                    "items-MAX_NUM_FORMS": "1000",
+                    "items-0-description": "Development Service",
+                    "items-0-item_price": "5000.00",
+                    "items-0-quantity": "1.00",
+                })
+            finally:
+                from django.db import connection as _conn
+                _conn.close()
+
+        t1 = threading.Thread(target=create_invoice_post, args=("r1",))
+        t2 = threading.Thread(target=create_invoice_post, args=("r2",))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+        r1 = results["r1"]
+        r2 = results["r2"]
 
         invoices = Invoice.objects.filter(company=self.company, client=self.client_record)
         invoice_numbers = list(invoices.values_list("invoice_number", flat=True))
