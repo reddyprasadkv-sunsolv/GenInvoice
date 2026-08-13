@@ -11,6 +11,9 @@ This runbook outlines the operational cutover procedure and rollback strategy fo
 - **Zero Data Loss Guarantee:** Primary key and foreign key preservation with strict sequence reset and transaction rollback on error.
 - **No Hardcoded Credentials:** All credentials and connection parameters passed via `DATABASE_URL` environment variable.
 
+> [!CAUTION]
+> **CRITICAL MANDATE:** DO NOT perform final production cutover into temporary or free-tier PostgreSQL databases. Production cutover requires provisioned, durable production infrastructure with automated point-in-time backups.
+
 ---
 
 ## Operational Cutover Runbook (19 Steps)

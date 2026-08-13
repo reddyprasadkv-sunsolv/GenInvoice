@@ -4601,6 +4601,310 @@ class FinancialConcurrencyTests(TransactionTestCase):
 
 
 class OperationalDataMigrationToolTests(TestCase):
+    def _create_synthetic_sqlite_db(self, filepath):
+        import sqlite3
+        from django.contrib.auth.hashers import make_password
+
+        conn = sqlite3.connect(filepath)
+        cursor = conn.cursor()
+
+        cursor.executescript("""
+            CREATE TABLE auth_user (
+                id INTEGER PRIMARY KEY,
+                password VARCHAR(128) NOT NULL,
+                last_login DATETIME NULL,
+                is_superuser BOOLEAN NOT NULL,
+                username VARCHAR(150) NOT NULL UNIQUE,
+                first_name VARCHAR(150) NOT NULL,
+                last_name VARCHAR(150) NOT NULL,
+                email VARCHAR(254) NOT NULL,
+                is_staff BOOLEAN NOT NULL,
+                is_active BOOLEAN NOT NULL,
+                date_joined DATETIME NOT NULL
+            );
+            CREATE TABLE billing_company (
+                id INTEGER PRIMARY KEY,
+                company_name VARCHAR(150) NOT NULL,
+                address TEXT NOT NULL,
+                country VARCHAR(80) NOT NULL,
+                state VARCHAR(80) NOT NULL,
+                city VARCHAR(80) NOT NULL,
+                pin_code VARCHAR(12) NOT NULL,
+                gstin VARCHAR(15) NOT NULL,
+                bank_name VARCHAR(150) NULL,
+                bank_account_number VARCHAR(50) NULL,
+                bank_branch VARCHAR(150) NULL,
+                ifsc_code VARCHAR(20) NULL,
+                account_name VARCHAR(200) NULL,
+                logo VARCHAR(100) NOT NULL,
+                authorized_signature VARCHAR(100) NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_client (
+                id INTEGER PRIMARY KEY,
+                client_name VARCHAR(150) NOT NULL,
+                address TEXT NOT NULL,
+                country VARCHAR(80) NOT NULL,
+                state VARCHAR(80) NOT NULL,
+                city VARCHAR(80) NOT NULL,
+                pin_code VARCHAR(12) NOT NULL,
+                gstin VARCHAR(15) NOT NULL,
+                requires_gst_invoice BOOLEAN NOT NULL,
+                client_status VARCHAR(20) NOT NULL,
+                is_deleted BOOLEAN NOT NULL,
+                deleted_at DATETIME NULL,
+                deleted_by_id INTEGER NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_project (
+                id INTEGER PRIMARY KEY,
+                project_id VARCHAR(40) NOT NULL UNIQUE,
+                project_name VARCHAR(180) NOT NULL,
+                client_id INTEGER NOT NULL,
+                project_requirement TEXT NOT NULL,
+                project_type VARCHAR(40) NOT NULL,
+                billing_type VARCHAR(20) NOT NULL,
+                custom_project_type VARCHAR(120) NOT NULL,
+                project_description TEXT NOT NULL,
+                start_date DATE NULL,
+                expected_completion_date DATE NULL,
+                actual_completion_date DATE NULL,
+                project_status VARCHAR(30) NOT NULL,
+                completion_percentage INTEGER NOT NULL,
+                priority VARCHAR(20) NOT NULL,
+                estimated_quote DECIMAL(12, 2) NOT NULL,
+                approved_quote DECIMAL(12, 2) NOT NULL,
+                currency VARCHAR(3) NOT NULL,
+                client_amount_gst_type VARCHAR(30) NOT NULL,
+                project_gst_percentage DECIMAL(5, 2) NOT NULL,
+                partial_gst_taxable_amount DECIMAL(12, 2) NOT NULL,
+                project_base_amount DECIMAL(12, 2) NOT NULL,
+                project_gst_amount DECIMAL(12, 2) NOT NULL,
+                project_total_with_gst DECIMAL(12, 2) NOT NULL,
+                client_advance_amount_received DECIMAL(12, 2) NOT NULL,
+                client_advance_received_date DATE NULL,
+                client_next_advance_amount DECIMAL(12, 2) NOT NULL,
+                client_next_advance_expected_date DATE NULL,
+                client_total_amount_received DECIMAL(12, 2) NOT NULL,
+                client_pending_amount DECIMAL(12, 2) NOT NULL,
+                client_payment_remarks TEXT NOT NULL,
+                remarks TEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_developervendor (
+                id INTEGER PRIMARY KEY,
+                name VARCHAR(180) NOT NULL,
+                vendor_type VARCHAR(40) NOT NULL,
+                contact_person VARCHAR(140) NOT NULL,
+                email VARCHAR(254) NOT NULL,
+                phone_number VARCHAR(30) NOT NULL,
+                address TEXT NOT NULL,
+                country VARCHAR(80) NOT NULL,
+                state VARCHAR(80) NOT NULL,
+                city VARCHAR(80) NOT NULL,
+                pin_code VARCHAR(12) NOT NULL,
+                gstin VARCHAR(15) NOT NULL,
+                pan VARCHAR(20) NOT NULL,
+                bank_details TEXT NOT NULL,
+                notes TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_projectassignment (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                developer_vendor_id INTEGER NOT NULL,
+                assigned_role VARCHAR(140) NOT NULL,
+                work_description TEXT NOT NULL,
+                developer_cost_estimate DECIMAL(12, 2) NOT NULL,
+                developer_final_project_cost DECIMAL(12, 2) NOT NULL,
+                advance_amount_sent DECIMAL(12, 2) NOT NULL,
+                advance_sent_date DATE NULL,
+                next_advance_amount_to_send DECIMAL(12, 2) NOT NULL,
+                next_advance_expected_date DATE NULL,
+                total_amount_paid_to_developer DECIMAL(12, 2) NOT NULL,
+                pending_amount_to_developer DECIMAL(12, 2) NOT NULL,
+                assignment_status VARCHAR(30) NOT NULL,
+                remarks TEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_invoice (
+                id INTEGER PRIMARY KEY,
+                invoice_number VARCHAR(40) NOT NULL UNIQUE,
+                company_id INTEGER NOT NULL,
+                client_id INTEGER NOT NULL,
+                project_id INTEGER NULL,
+                invoice_date DATE NOT NULL,
+                subject VARCHAR(200) NOT NULL,
+                currency VARCHAR(3) NOT NULL,
+                apply_gst BOOLEAN NOT NULL,
+                subtotal DECIMAL(12, 2) NOT NULL,
+                gst_percentage DECIMAL(5, 2) NOT NULL,
+                gst_amount DECIMAL(12, 2) NOT NULL,
+                total_amount DECIMAL(12, 2) NOT NULL,
+                amount_in_words VARCHAR(500) NOT NULL,
+                terms_and_conditions TEXT NOT NULL,
+                declaration TEXT NOT NULL,
+                payment_status VARCHAR(20) NOT NULL,
+                invoice_status VARCHAR(20) NOT NULL,
+                is_deleted BOOLEAN NOT NULL,
+                deleted_at DATETIME NULL,
+                deleted_by_id INTEGER NULL,
+                received_amount DECIMAL(12, 2) NOT NULL,
+                pending_amount DECIMAL(12, 2) NOT NULL,
+                pdf_file VARCHAR(100) NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_hsnsaccode (
+                id INTEGER PRIMARY KEY,
+                code VARCHAR(20) NOT NULL UNIQUE,
+                description VARCHAR(255) NULL
+            );
+            CREATE TABLE billing_invoiceitem (
+                id INTEGER PRIMARY KEY,
+                invoice_id INTEGER NOT NULL,
+                serial_number INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                hsn_sac_code_id INTEGER NULL,
+                item_price DECIMAL(12, 2) NOT NULL,
+                quantity DECIMAL(10, 2) NOT NULL,
+                total DECIMAL(12, 2) NOT NULL
+            );
+            CREATE TABLE billing_payment (
+                id INTEGER PRIMARY KEY,
+                invoice_id INTEGER NOT NULL,
+                received_amount DECIMAL(12, 2) NOT NULL,
+                payment_date DATE NOT NULL,
+                payment_mode VARCHAR(20) NOT NULL,
+                remarks TEXT NOT NULL,
+                created_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_projectclientpayment (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                amount_received DECIMAL(12, 2) NOT NULL,
+                payment_date DATE NOT NULL,
+                payment_mode VARCHAR(20) NOT NULL,
+                payment_type VARCHAR(30) NOT NULL,
+                remarks TEXT NOT NULL,
+                created_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_developerpayment (
+                id INTEGER PRIMARY KEY,
+                project_assignment_id INTEGER NOT NULL,
+                amount_paid DECIMAL(12, 2) NOT NULL,
+                payment_date DATE NOT NULL,
+                payment_mode VARCHAR(20) NOT NULL,
+                payment_type VARCHAR(30) NOT NULL,
+                remarks TEXT NOT NULL,
+                created_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_activitylog (
+                id INTEGER PRIMARY KEY,
+                action VARCHAR(100) NOT NULL,
+                module VARCHAR(100) NOT NULL,
+                description TEXT NULL,
+                object_id INTEGER NULL,
+                created_by_id INTEGER NULL,
+                created_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_recurringinvoicetemplate (
+                id INTEGER PRIMARY KEY,
+                company_id INTEGER NOT NULL,
+                client_id INTEGER NOT NULL,
+                project_id INTEGER NULL,
+                title VARCHAR(200) NOT NULL,
+                frequency VARCHAR(20) NOT NULL,
+                next_invoice_date DATE NOT NULL,
+                apply_gst BOOLEAN NOT NULL,
+                is_active BOOLEAN NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            CREATE TABLE billing_recurringinvoicetemplateitem (
+                id INTEGER PRIMARY KEY,
+                template_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                hsn_sac_code_id INTEGER NULL,
+                item_price DECIMAL(12, 2) NOT NULL,
+                quantity DECIMAL(10, 2) NOT NULL
+            );
+            CREATE TABLE billing_applicationsetting (
+                id INTEGER PRIMARY KEY,
+                default_gst_percentage DECIMAL(5, 2) NOT NULL,
+                default_terms_and_conditions TEXT NOT NULL,
+                default_declaration TEXT NOT NULL,
+                default_payment_terms VARCHAR(160) NOT NULL,
+                backup_reminder_dismissed_on DATE NULL,
+                invoice_number_format VARCHAR(140) NOT NULL,
+                date_separator VARCHAR(3) NOT NULL,
+                prefix_separator VARCHAR(3) NOT NULL,
+                running_sequence_length INTEGER NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+        """)
+
+        # Insert synthetic data rows with exact known PKs and values
+        pw_hash = make_password("SynthPass123!")
+        cursor.execute(
+            "INSERT INTO auth_user VALUES (1, ?, '2026-08-13 10:00:00', 0, 'synth_user', 'Synth', 'User', 'synth@example.com', 0, 1, '2026-08-13 10:00:00')",
+            (pw_hash,),
+        )
+        cursor.execute(
+            "INSERT INTO billing_company VALUES (8, 'Synth Corp', '123 Tech Park', 'India', 'Telangana', 'Hyderabad', '500081', '36AAAAA0000A1Z5', 'Bank', '1234', 'Branch', 'IFSC', 'Account', '', '', '2026-08-13 10:00:00', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_client VALUES (20, 'Synth Client', '456 St', 'India', 'TN', 'Chennai', '600001', '33AAAAA0000A1Z5', 1, 'Active', 0, NULL, NULL, '2026-08-13 10:00:00', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_project VALUES (9, 'PRJ-20260813-001', 'Synth Project', 20, 'Req', 'Web Application', 'One Time', '', '', '2026-08-01', '2026-08-31', NULL, 'In Progress', 50, 'Medium', 3300500.00, 3300500.00, 'INR', 'WITHOUT_GST', 18.00, 0.00, 3300500.00, 0.00, 3300500.00, 0.00, NULL, 0.00, NULL, 0.00, 3300500.00, '', '', '2026-08-13 10:00:00', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_developervendor VALUES (2, 'Synth Vendor', 'Individual Developer', 'Contact', 'v@example.com', '1234567890', 'Address', 'India', 'KA', 'Bangalore', '560001', '', '', '', '', 'Active', '2026-08-13 10:00:00', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_projectassignment VALUES (9, 9, 2, 'Lead Dev', 'Dev work', 123456.78, 123456.78, 0.00, NULL, 0.00, NULL, 0.00, 123456.78, 'Assigned', '', '2026-08-13 10:00:00', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_invoice VALUES (32, 'INV-SYNTH-20260813-001', 8, 20, 9, '2026-08-13', 'Subject', 'INR', 1, 123456.78, 18.00, 22222.22, 145679.00, 'One Lakh...', 'Terms', 'Decl', 'Pending', 'Final', 0, NULL, NULL, 870.00, 144809.00, '', '2026-08-13 10:00:00', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_hsnsaccode VALUES (3, '998313', 'IT Consulting')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_invoiceitem VALUES (114, 32, 1, 'Development', 3, 123456.78, 1.00, 123456.78)"
+        )
+        cursor.execute(
+            "INSERT INTO billing_payment VALUES (16, 32, 870.00, '2026-08-13', 'Bank Transfer', 'Payment remarks', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_projectclientpayment VALUES (19, 9, 5000.00, '2026-08-13', 'Bank Transfer', 'Advance', '', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_developerpayment VALUES (19, 9, 2500.00, '2026-08-13', 'Bank Transfer', 'Advance', '', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_activitylog VALUES (122, 'create', 'Invoice', 'Log desc', 32, 1, '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_recurringinvoicetemplate VALUES (1, 8, 20, 9, 'Monthly Dev', 'Monthly', '2026-09-01', 1, 1, '2026-08-13 10:00:00', '2026-08-13 10:00:00')"
+        )
+        cursor.execute(
+            "INSERT INTO billing_recurringinvoicetemplateitem VALUES (3, 1, 'Monthly item', 3, 100.00, 1.00)"
+        )
+        cursor.execute(
+            "INSERT INTO billing_applicationsetting VALUES (1, 18.00, 'Terms', 'Decl', 'Pay terms', NULL, '{company3}{client3}-{date_ddmmyyyy}-{sequence:03d}', '', '-', 3, '2026-08-13 10:00:00')"
+        )
+
+        conn.commit()
+        conn.close()
+
     def test_migration_tool_requires_postgresql_vendor(self):
         from django.core.management.base import CommandError
         temp_dir = tempfile.mkdtemp()
@@ -4625,7 +4929,7 @@ class OperationalDataMigrationToolTests(TestCase):
             call_command("migrate_operational_data", source_sqlite="/invalid/path/db.sqlite3", confirm=True)
         self.assertIn("does not exist", str(ctx.exception))
 
-    def test_migration_tool_rejects_non_empty_target(self):
+    def test_migration_rejects_non_empty_destination(self):
         from django.core.management.base import CommandError
         Company.objects.create(
             company_name="Test Co",
@@ -4650,5 +4954,173 @@ class OperationalDataMigrationToolTests(TestCase):
                 self.assertIn("SAFETY BLOCK", str(ctx.exception))
         finally:
             shutil.rmtree(temp_dir)
+
+    def test_migration_rolls_back_all_destination_rows_on_failure(self):
+        from django.core.management.base import CommandError
+        temp_dir = tempfile.mkdtemp()
+        synth_sqlite = Path(temp_dir) / "synth.sqlite3"
+        try:
+            self._create_synthetic_sqlite_db(synth_sqlite)
+            with patch("django.db.connection.vendor", "postgresql"):
+                with patch("billing.management.commands.migrate_operational_data.Command._migrate_invoices", side_effect=ValueError("Controlled failure")):
+                    with self.assertRaises(CommandError) as ctx:
+                        call_command("migrate_operational_data", source_sqlite=str(synth_sqlite), confirm=True)
+                    self.assertIn("Controlled failure", str(ctx.exception))
+
+            # Verify rollback: 0 business records in destination
+            self.assertEqual(Company.objects.count(), 0)
+            self.assertEqual(Client.objects.count(), 0)
+            self.assertEqual(Project.objects.count(), 0)
+            self.assertEqual(Invoice.objects.count(), 0)
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_migration_preserves_primary_keys(self):
+        temp_dir = tempfile.mkdtemp()
+        synth_sqlite = Path(temp_dir) / "synth.sqlite3"
+        try:
+            self._create_synthetic_sqlite_db(synth_sqlite)
+            with patch("django.db.connection.vendor", "postgresql"):
+                call_command("migrate_operational_data", source_sqlite=str(synth_sqlite), confirm=True)
+
+            self.assertTrue(Company.objects.filter(pk=8, company_name="Synth Corp").exists())
+            self.assertTrue(Client.objects.filter(pk=20, client_name="Synth Client").exists())
+            self.assertTrue(Project.objects.filter(pk=9, project_id="PRJ-20260813-001").exists())
+            self.assertTrue(DeveloperVendor.objects.filter(pk=2, name="Synth Vendor").exists())
+            self.assertTrue(ProjectAssignment.objects.filter(pk=9).exists())
+            self.assertTrue(Invoice.objects.filter(pk=32, invoice_number="INV-SYNTH-20260813-001").exists())
+            self.assertTrue(InvoiceItem.objects.filter(pk=114, invoice_id=32).exists())
+            self.assertTrue(Payment.objects.filter(pk=16, invoice_id=32).exists())
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_migration_preserves_exact_decimals(self):
+        temp_dir = tempfile.mkdtemp()
+        synth_sqlite = Path(temp_dir) / "synth.sqlite3"
+        try:
+            self._create_synthetic_sqlite_db(synth_sqlite)
+            with patch("django.db.connection.vendor", "postgresql"):
+                call_command("migrate_operational_data", source_sqlite=str(synth_sqlite), confirm=True)
+
+            inv = Invoice.objects.get(pk=32)
+            self.assertEqual(inv.subtotal, Decimal("123456.78"))
+            self.assertEqual(inv.gst_amount, Decimal("22222.22"))
+            self.assertEqual(inv.total_amount, Decimal("145679.00"))
+
+            item = InvoiceItem.objects.get(pk=114)
+            self.assertEqual(item.item_price, Decimal("123456.78"))
+            self.assertEqual(item.total, Decimal("123456.78"))
+
+            payment = Payment.objects.get(pk=16)
+            self.assertEqual(payment.received_amount, Decimal("870.00"))
+
+            dev_payment = DeveloperPayment.objects.get(pk=19)
+            self.assertEqual(dev_payment.amount_paid, Decimal("2500.00"))
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_migration_preserves_foreign_key_relationships(self):
+        temp_dir = tempfile.mkdtemp()
+        synth_sqlite = Path(temp_dir) / "synth.sqlite3"
+        try:
+            self._create_synthetic_sqlite_db(synth_sqlite)
+            with patch("django.db.connection.vendor", "postgresql"):
+                call_command("migrate_operational_data", source_sqlite=str(synth_sqlite), confirm=True)
+
+            inv = Invoice.objects.get(pk=32)
+            self.assertEqual(inv.company.pk, 8)
+            self.assertEqual(inv.client.pk, 20)
+            self.assertEqual(inv.project.pk, 9)
+
+            item = InvoiceItem.objects.get(pk=114)
+            self.assertEqual(item.invoice.pk, 32)
+            self.assertEqual(item.hsn_sac_code.pk, 3)
+
+            payment = Payment.objects.get(pk=16)
+            self.assertEqual(payment.invoice.pk, 32)
+
+            pa = ProjectAssignment.objects.get(pk=9)
+            self.assertEqual(pa.project.pk, 9)
+            self.assertEqual(pa.developer_vendor.pk, 2)
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_migration_preserves_exact_invoice_numbers(self):
+        temp_dir = tempfile.mkdtemp()
+        synth_sqlite = Path(temp_dir) / "synth.sqlite3"
+        try:
+            self._create_synthetic_sqlite_db(synth_sqlite)
+            with patch("django.db.connection.vendor", "postgresql"):
+                call_command("migrate_operational_data", source_sqlite=str(synth_sqlite), confirm=True)
+
+            inv = Invoice.objects.get(pk=32)
+            self.assertEqual(inv.invoice_number, "INV-SYNTH-20260813-001")
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_migration_preserves_user_password_hashes(self):
+        temp_dir = tempfile.mkdtemp()
+        synth_sqlite = Path(temp_dir) / "synth.sqlite3"
+        try:
+            self._create_synthetic_sqlite_db(synth_sqlite)
+            with patch("django.db.connection.vendor", "postgresql"):
+                call_command("migrate_operational_data", source_sqlite=str(synth_sqlite), confirm=True)
+
+            user = get_user_model().objects.get(username="synth_user")
+            self.assertTrue(user.check_password("SynthPass123!"))
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_migration_leaves_source_sqlite_read_only(self):
+        import hashlib
+        temp_dir = tempfile.mkdtemp()
+        synth_sqlite = Path(temp_dir) / "synth.sqlite3"
+        try:
+            self._create_synthetic_sqlite_db(synth_sqlite)
+            sha_before = hashlib.sha256(synth_sqlite.read_bytes()).hexdigest()
+
+            with patch("django.db.connection.vendor", "postgresql"):
+                call_command("migrate_operational_data", source_sqlite=str(synth_sqlite), confirm=True)
+
+            sha_after = hashlib.sha256(synth_sqlite.read_bytes()).hexdigest()
+            self.assertEqual(sha_before, sha_after)
+        finally:
+            shutil.rmtree(temp_dir)
+
+    @skipIf(connection.vendor != "postgresql", "PostgreSQL sequence test requires postgresql vendor")
+    def test_migration_resets_postgresql_sequences(self):
+        temp_dir = tempfile.mkdtemp()
+        synth_sqlite = Path(temp_dir) / "synth.sqlite3"
+        try:
+            self._create_synthetic_sqlite_db(synth_sqlite)
+            call_command("migrate_operational_data", source_sqlite=str(synth_sqlite), confirm=True)
+
+            new_client = Client.objects.create(
+                client_name="Post-Mig Client",
+                address="Address",
+                country="India",
+                state="TN",
+                city="Chennai",
+                pin_code="600001",
+            )
+            self.assertGreater(new_client.id, 20)
+
+            company = Company.objects.get(pk=8)
+            new_inv = Invoice.objects.create(
+                invoice_number="INV-POST-MIG-001",
+                company=company,
+                client=new_client,
+                invoice_date="2026-08-13",
+                currency="INR",
+                subtotal=Decimal("1000.00"),
+                gst_amount=Decimal("180.00"),
+                total_amount=Decimal("1180.00"),
+                received_amount=Decimal("0.00"),
+                pending_amount=Decimal("1180.00"),
+            )
+            self.assertGreater(new_inv.id, 32)
+        finally:
+            shutil.rmtree(temp_dir)
+
 
 
